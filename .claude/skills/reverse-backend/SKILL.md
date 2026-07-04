@@ -42,7 +42,13 @@ argument-hint: <파일_또는_디렉토리_경로>
 그 적용 대상. **주석 여부를 반드시 확인**한다.
 
 **1-D. 비즈니스 로직 · 검증 규칙 · 에러 응답**: 예외 발생, HTTP 에러 응답(상태코드+메시지),
-정책성 상수(임계값·한도 등).
+정책성 상수(임계값·한도 등). 에러 응답은 아래 RFC 9457(Problem Details, RFC 7807 대체)
+필드 기준으로 구조를 파악한다 — 코드가 이 형식을 쓰는지, 아니면 임의 JSON인지 함께 기록한다.
+
+- `type` (문제 유형 URI), `title` (짧은 요약), `status` (HTTP 상태코드),
+  `detail` (이번 발생 건의 구체 설명), `instance` (발생 위치 URI)
+- 표준 미디어 타입: `application/problem+json` (XML은 `application/problem+xml`)
+- (출처: RFC 9457, https://www.rfc-editor.org/rfc/rfc9457.html)
 
 **1-E. 외부 연동 & 환경변수**: 서드파티 SDK(결제/메일/알림 등), 환경변수 참조
 (변수명만 — 절대 값을 읽거나 출력하지 않는다), 외부 API 호출.
@@ -64,8 +70,23 @@ Slack(`xox...`) 같은 키 패턴이 코드에 하드코딩돼 있는지도 확�
 
 - **API 정책 해석**: 엔드포인트+가드 → "이 엔드포인트는 인증된 사용자만 접근 가능하다"
   같은 검증 가능한 정책 문장으로 변환.
-- **보안 리스크 평가**: 가드 없는 쓰기 엔드포인트(POST/PUT/DELETE), 시크릿 노출 여부,
-  CSRF 설정, IDOR(권한 확인 없이 ID로 타인 데이터 접근) 가능성.
+- **보안 리스크 평가 — OWASP API Security Top 10 (2023) 매핑**: 아래 표를 기준으로
+  각 발견 항목에 해당 리스크 ID를 태깅한다. 근거가 명확하지 않으면 `[추정]`을 붙인다.
+
+  | ID | 리스크 | 코드에서 확인할 신호 |
+  |----|--------|----------------------|
+  | **API1:2023** | Broken Object Level Authorization (BOLA/IDOR) | 경로/바디의 리소스 ID로 접근하면서 소유자 검증(예: `obj.owner == request.user`)이 없음 |
+  | **API2:2023** | Broken Authentication | 인증 가드 없음·약한 토큰 검증·만료/서명 미검증 |
+  | **API3:2023** | Broken Object Property Level Authorization | 직렬화 시 민감 필드 노출, 사용자가 바꾸면 안 되는 필드까지 업데이트 허용(mass assignment) |
+  | **API4:2023** | Unrestricted Resource Consumption | rate limit·페이지네이션 한도·업로드 크기 제한 없음 |
+  | **API5:2023** | Broken Function Level Authorization | 관리자/특권 엔드포인트에 롤 체크 누락 (가드 없는 쓰기 엔드포인트가 주로 여기 해당) |
+  | **API6:2023** | Unrestricted Access to Sensitive Business Flows | 결제·가입·예약 등 핵심 플로우에 자동화/남용 방지 장치 없음 |
+  | **API7:2023** | Server Side Request Forgery (SSRF) | 사용자 입력 URL을 서버가 검증 없이 fetch/request |
+  | **API8:2023** | Security Misconfiguration | CSRF 비활성·과도한 CORS·디버그 모드·시크릿 하드코딩 |
+  | **API9:2023** | Improper Inventory Management | 미문서화/구버전(v1) 엔드포인트, 죽은 라우트, 노출된 내부/디버그 엔드포인트 |
+  | **API10:2023** | Unsafe Consumption of APIs | 외부 API 응답을 검증 없이 그대로 신뢰·저장 |
+
+  (출처: OWASP API Security Top 10 – 2023, https://owasp.org/API-Security/editions/2023/en/0x11-t10/)
 - **도메인 목적 추론** `[추정]`: 모델명·라우트 경로에서 비즈니스 도메인을 추정.
 - **프론트엔드 대조** (프론트 역기획 문서가 있다면): 그쪽에서 "클라이언트 측 —
   서버 미확인"으로 남긴 항목이 여기서 확인되면 `[서버 검증됨]`으로 격상한다.
@@ -82,7 +103,7 @@ Slack(`xox...`) 같은 키 패턴이 코드에 하드코딩돼 있는지도 확�
    2.2 데이터 모델
    2.3 공통 정책 (인증/인가, 에러 처리 공통 규칙)
    2.4 엔드포인트별 정책
-   2.5 에러 응답 카탈로그
+   2.5 에러 응답 카탈로그 (RFC 9457 Problem Details 필드 기준; 표준 미준수 시 표기)
    2.6 백그라운드 작업 · 메시징
 3. 핵심 로직 / 교차검증
    3.1 핵심 비즈니스 로직 상세
@@ -91,10 +112,11 @@ Slack(`xox...`) 같은 키 패턴이 코드에 하드코딩돼 있는지도 확�
 4. 시스템 구조
    4.1 외부 연동 & 환경변수 인벤토리
    4.2 인증/인가 매트릭스 (롤 × 엔드포인트)
-5. 보안 점검 ★ (문서 최상단에도 요약 배치)
-   5.1 하드코딩 시크릿 노출 스캔 결과
-   5.2 가드 없는 쓰기 엔드포인트 목록
-   5.3 권한 분기 누락 위험 항목
+5. 보안 점검 ★ (문서 최상단에도 요약 배치 / OWASP API Security Top 10 2023 매핑)
+   5.1 하드코딩 시크릿 노출 스캔 결과 (API8:2023)
+   5.2 가드 없는 쓰기 엔드포인트 목록 (API5:2023)
+   5.3 권한 분기 누락 위험 항목 — BOLA/IDOR (API1:2023), 특권 함수 (API5:2023)
+   5.4 OWASP API Top 10 커버리지 표 (ID별 발견/미발견/해당없음)
 6. Appendix
    6.1 개발 참조 (엔드포인트/모델 전체 목록)
    6.2 추적성 매트릭스 (정책 ↔ 엔드포인트 ↔ 코드 파일)
@@ -131,3 +153,17 @@ Slack(`xox...`) 같은 키 패턴이 코드에 하드코딩돼 있는지도 확�
   이름만 보고 기능을 단정하는 것"이다.** 인증 가드, 백그라운드 작업 판단 시 반드시
   실제 코드가 살아있는지, 정말 그 역할을 하는지 직접 읽어서 확인한다.
 - 민감 정보(시크릿 값, API 키 등)는 어떤 경우에도 문서에 값으로 포함하지 않는다.
+
+## 표준 근거 (References)
+
+이 스킬의 보안 점검·에러 처리 기준은 아래 공개 표준에 근거한다. 문서 생성 시 발견
+항목에 해당 표준 ID를 인용해 추적 가능하게 만든다.
+
+- **OWASP API Security Top 10 – 2023** (API1:2023 ~ API10:2023) —
+  https://owasp.org/API-Security/editions/2023/en/0x11-t10/
+- **RFC 9457 — Problem Details for HTTP APIs** (2023, RFC 7807 대체;
+  `application/problem+json`) — https://www.rfc-editor.org/rfc/rfc9457.html
+
+주의: 위 표준은 API 설계·보안의 대표적 기준일 뿐 전부는 아니다. 인증/세션 세부는
+OWASP ASVS, 코드 취약점 분류는 CWE 등으로 추가 대조가 필요할 수 있으며, 그런 항목은
+`[별도 확인 필요]`로 남긴다.
