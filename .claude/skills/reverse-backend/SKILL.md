@@ -127,7 +127,32 @@ Slack(`xox...`) 같은 키 패턴이 코드에 하드코딩돼 있는지도 확�
 채우기 규칙: 근거 있는 항목은 코드 근거를 명시하고, 불충분하면 `[추정]`, 코드에
 없으면 `[정보 없음 — 별도 확인 필요]`로 표기한다. 시크릿은 절대 값으로 포함하지 않는다.
 
-### Step 4 — 완료 보고
+### Step 4 — 산출물 렌더링 (Markdown + HTML + PDF)
+
+문서를 세 형식으로 산출한다. **Markdown(`.md`)을 정본(source of truth)으로 작성**하고,
+그것을 HTML·PDF로 변환한다. 번들 스크립트가 의존성 없이 처리한다(HTML은 항상,
+PDF는 Chromium이 있을 때).
+
+1. Step 3 문서를 `<이름>.md`로 저장한다.
+2. 렌더 스크립트를 실행한다 (스킬 디렉토리 기준 `scripts/`):
+
+   ```
+   node scripts/render.js <이름>.md <출력_basename> "<문서 제목>"
+   ```
+
+   - `<출력_basename>.html` — 항상 생성 (self-contained, 인쇄용 CSS 포함).
+   - `<출력_basename>.pdf` — Chromium/Chrome 발견 시 생성. `PLAYWRIGHT_BROWSERS_PATH`
+     또는 표준 경로(`/usr/bin/chromium`, `google-chrome` 등), `CHROME_BIN`을 자동 탐색.
+   - HTML만 필요하면 `node scripts/md2html.js <이름>.md <출력>.html "<제목>"`.
+
+3. **PDF는 반드시 `--headless=new` 경로로 생성**된다(구 headless 모드는 페이지네이션이
+   깨져 전체가 1페이지로 나옴 — render.js가 이미 이 옵션을 사용). PDF 페이지 수가 1이면
+   렌더 실패를 의심하고 재실행한다.
+4. Chromium이 없으면 스크립트가 PDF를 건너뛰고 안내를 출력한다 — 이때는 HTML을 브라우저에서
+   열어 인쇄(Ctrl/Cmd+P)로 PDF화하도록 사용자에게 안내한다.
+5. 생성한 `.md` / `.html` / `.pdf`를 모두 사용자에게 전달한다.
+
+### Step 5 — 완료 보고
 
 ```
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

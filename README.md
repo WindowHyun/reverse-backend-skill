@@ -12,6 +12,8 @@
 - ⚠️ **보안 점검 (OWASP API Security Top 10 2023 매핑)** — 하드코딩 시크릿 노출, 가드 없는 쓰기 엔드포인트, BOLA/IDOR 등 권한 분기 누락
 - 📛 **에러 응답 카탈로그 (RFC 9457 Problem Details 기준)** — 표준 준수 여부까지 판정
 
+산출물은 **Markdown + HTML + PDF** 세 형식으로 나옵니다 (아래 [산출물 형식](#산출물-형식) 참조).
+
 ## 설치
 
 이 저장소의 `.claude/skills/reverse-backend/` 디렉토리를 스킬로 인식시킵니다.
@@ -69,7 +71,8 @@ cp -r reverse-backend-skill/.claude/skills/reverse-backend ~/.claude/skills/
 | **Step 1** | 코드에서 사실만 원자료로 추출 (엔드포인트/모델/가드/규칙/연동/시크릿 스캔) |
 | **Step 2** | 의미 분석 — 정책 문장화, 보안 리스크 평가, 도메인 추론 |
 | **Step 3** | 표준 목차로 정책 문서 구성 |
-| **Step 4** | 완료 요약 리포트 (발견 개수·경고·교차검증 필요 항목) |
+| **Step 4** | Markdown → HTML → PDF 렌더링 (Chromium 자동 탐색) |
+| **Step 5** | 완료 요약 리포트 (발견 개수·경고·교차검증 필요 항목) |
 
 ## 안전 원칙
 
@@ -77,6 +80,30 @@ cp -r reverse-backend-skill/.claude/skills/reverse-backend ~/.claude/skills/
 - 🔍 **주석 처리된 죽은 코드를 활성 동작으로 오인하지 않습니다.** 특히 인증 가드는 실제 활성 여부를 직접 확인합니다.
 - 🏷 **이름만으로 기능을 단정하지 않습니다.** `worker`/`consumer` 같은 이름이라도 실제 로직을 읽어 확인합니다.
 - 🏷 근거가 있으면 코드 위치를 명시하고, 불충분하면 `[추정]`, 코드에 없으면 `[정보 없음 — 별도 확인 필요]` 로 표기합니다.
+
+## 산출물 형식
+
+역기획 문서는 세 형식으로 생성됩니다. **Markdown이 정본**이고, 스킬에 포함된 스크립트가 이를 HTML·PDF로 변환합니다.
+
+| 형식 | 생성 조건 | 용도 |
+|------|-----------|------|
+| `.md` | 항상 | 정본, git 커밋·수정용 |
+| `.html` | 항상 (Node 필요) | 인쇄용 CSS 포함, self-contained |
+| `.pdf` | Chromium/Chrome 발견 시 | 배포·공유용 (8쪽 예시) |
+
+내부적으로 다음 스크립트를 사용합니다 (npm 패키지 의존성 없음):
+
+```bash
+# HTML + PDF 한 번에 (Chromium 자동 탐색)
+node .claude/skills/reverse-backend/scripts/render.js report.md report "문서 제목"
+
+# HTML만
+node .claude/skills/reverse-backend/scripts/md2html.js report.md report.html "문서 제목"
+```
+
+- **HTML 변환**: Node.js만 있으면 동작 (외부 패키지 불필요).
+- **PDF 변환**: 헤드리스 Chromium/Chrome 필요. `PLAYWRIGHT_BROWSERS_PATH`, 표준 설치 경로, `CHROME_BIN`을 자동 탐색합니다. 없으면 PDF는 건너뛰고 HTML을 브라우저에서 인쇄(Ctrl/Cmd+P)해 PDF로 저장할 수 있습니다.
+- PDF는 `--headless=new` 모드로 렌더링됩니다(구 모드는 페이지네이션이 깨져 전체가 1페이지로 나오므로 사용 안 함).
 
 ## 표준 근거
 
