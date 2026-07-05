@@ -134,16 +134,18 @@ Slack(`xox...`) 같은 키 패턴이 코드에 하드코딩돼 있는지도 확�
 PDF는 Chromium이 있을 때).
 
 1. Step 3 문서를 `<이름>.md`로 저장한다.
-2. 렌더 스크립트를 실행한다 (스킬 디렉토리 기준 `scripts/`):
+2. 렌더 스크립트를 실행한다. **작업 디렉토리는 분석 대상 레포이므로 상대경로가 아니라
+   스킬 base 디렉토리의 절대경로로 호출한다** (스킬 실행 시 헤더에 출력되는
+   `Base directory for this skill: <경로>` 값을 `<SKILL_DIR>`로 사용):
 
    ```
-   node scripts/render.js <이름>.md <출력_basename> "<문서 제목>"
+   node "<SKILL_DIR>/scripts/render.js" <이름>.md <출력_basename> "<문서 제목>"
    ```
 
    - `<출력_basename>.html` — 항상 생성 (self-contained, 인쇄용 CSS 포함).
    - `<출력_basename>.pdf` — Chromium/Chrome 발견 시 생성. `PLAYWRIGHT_BROWSERS_PATH`
      또는 표준 경로(`/usr/bin/chromium`, `google-chrome` 등), `CHROME_BIN`을 자동 탐색.
-   - HTML만 필요하면 `node scripts/md2html.js <이름>.md <출력>.html "<제목>"`.
+   - HTML만 필요하면 `node "<SKILL_DIR>/scripts/md2html.js" <이름>.md <출력>.html "<제목>"`.
 
 3. **PDF는 반드시 `--headless=new` 경로로 생성**된다(구 headless 모드는 페이지네이션이
    깨져 전체가 1페이지로 나옴 — render.js가 이미 이 옵션을 사용). PDF 페이지 수가 1이면

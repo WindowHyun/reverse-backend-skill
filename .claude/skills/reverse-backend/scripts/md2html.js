@@ -12,7 +12,10 @@ function inline(s){
   s = s.replace(/`([^`]+)`/g, (_,c)=>`<code>${c}</code>`);
   s = s.replace(/\*\*([^*]+)\*\*/g, (_,c)=>`<strong>${c}</strong>`);
   s = s.replace(/\[([^\]]+)\]\((https?:[^)]+)\)/g, (_,t,u)=>`<a href="${u}">${t}</a>`);
-  s = s.replace(/(?<!["=(])\b(https?:\/\/[^\s<)]+)/g, (m)=>`<a href="${m}">${m}</a>`);
+  // Autolink bare URLs, but not ones already inside a tag we just emitted.
+  // After esc() the only real '>' / '"' / '=' come from those tags, so excluding
+  // them in the lookbehind prevents double-wrapping (e.g. link text that is a URL).
+  s = s.replace(/(?<!["=(>])\b(https?:\/\/[^\s<)]+)/g, (m)=>`<a href="${m}">${m}</a>`);
   return s;
 }
 function tableHTML(rows){
@@ -30,6 +33,16 @@ function blocks(lines){
   while(i<lines.length){
     const line=lines[i];
     if(/^\s*$/.test(line)){i++;continue;}
+    // fenced code block: ```lang ... ``` — emit verbatim, no inline processing
+    let fm;
+    if((fm=line.match(/^```+\s*([\w+-]*)\s*$/))){
+      const lang=fm[1]; const buf=[]; i++;
+      while(i<lines.length && !/^```+\s*$/.test(lines[i])){buf.push(lines[i]);i++;}
+      if(i<lines.length) i++; // consume closing fence
+      const cls = lang ? ` class="lang-${lang}"` : "";
+      out.push(`<pre><code${cls}>${esc(buf.join("\n"))}</code></pre>`);
+      continue;
+    }
     if(/^\|.*\|/.test(line) && i+1<lines.length && /^\|[\s:|-]+\|/.test(lines[i+1])){
       const rows=[];while(i<lines.length&&/^\|.*\|/.test(lines[i])){rows.push(lines[i]);i++;}
       out.push(tableHTML(rows));continue;
@@ -51,7 +64,7 @@ function blocks(lines){
       out.push(`<${ordered?"ol":"ul"}>${items.join("")}</${ordered?"ol":"ul"}>`);continue;
     }
     const buf=[line];i++;
-    while(i<lines.length&&!/^\s*$/.test(lines[i])&&!/^[#>|-]/.test(lines[i])&&!/^\s*[-*]\s/.test(lines[i])&&!/^\s*\d+\.\s/.test(lines[i])){buf.push(lines[i]);i++;}
+    while(i<lines.length&&!/^\s*$/.test(lines[i])&&!/^[#>|-]/.test(lines[i])&&!/^```+/.test(lines[i])&&!/^\s*[-*]\s/.test(lines[i])&&!/^\s*\d+\.\s/.test(lines[i])){buf.push(lines[i]);i++;}
     out.push(`<p>${inline(buf.join(" "))}</p>`);
   }
   return out.join("\n");
@@ -65,7 +78,10 @@ h2{font-size:20px;margin:34px 0 12px;padding-bottom:6px;border-bottom:1px solid 
 h3{font-size:16px;margin:22px 0 8px;color:#2d3540;}
 p{margin:8px 0;} a{color:var(--accent);text-decoration:none;}
 code{background:var(--codebg);padding:1.5px 5px;border-radius:4px;font-family:"SFMono-Regular",Consolas,monospace;font-size:0.88em;}
+pre{background:var(--codebg);border:1px solid var(--line);border-radius:6px;padding:12px 14px;margin:14px 0;overflow-x:auto;line-height:1.5;}
+pre code{background:none;padding:0;border-radius:0;font-size:0.86em;white-space:pre;}
 hr{border:none;border-top:1px solid var(--line);margin:26px 0;}
+@media print{pre{page-break-inside:avoid;white-space:pre-wrap;}}
 blockquote{background:#fff8f0;border:1px solid #f0d9b8;border-left:4px solid #e08a2b;border-radius:6px;padding:12px 18px;margin:16px 0;}
 blockquote p{margin:6px 0;}
 table{border-collapse:collapse;width:100%;margin:14px 0;font-size:13px;}
