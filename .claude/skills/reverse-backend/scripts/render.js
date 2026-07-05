@@ -44,15 +44,23 @@ if(!chrome){
   console.log("     Open the HTML in a browser and print to PDF (Ctrl/Cmd+P), or set CHROME_BIN.");
   process.exit(0);
 }
+let launchErr = null;
 try {
   // --headless=new is required for correct pagination; the old headless mode emits a single page.
   execFileSync(chrome, [
     "--headless=new", "--no-sandbox", "--disable-gpu", "--no-pdf-header-footer",
     "--print-to-pdf=" + pdfPath, "file://" + path.resolve(htmlPath),
-  ], { stdio: ["ignore", "ignore", "ignore"] });
+  ], { stdio: ["ignore", "ignore", "ignore"], timeout: 60000 });
+} catch (e) {
+  launchErr = e; // may be a benign non-zero exit (e.g. dbus warnings) even when the PDF was written
+}
+// Judge success by the artifact, not the exit code: Chromium can exit non-zero on
+// harmless warnings yet still produce a valid PDF.
+if (fs.existsSync(pdfPath) && fs.statSync(pdfPath).size > 1000) {
   const kb = Math.round(fs.statSync(pdfPath).size / 1024);
   console.log(`PDF:  ${pdfPath} (${kb} KB) via ${chrome}`);
-} catch (e) {
-  console.log("PDF: failed —", e.message);
+} else {
+  console.log("PDF: failed —", launchErr ? launchErr.message : "no output produced");
   console.log("     HTML is still available; print it to PDF manually.");
+  process.exitCode = 1;
 }
