@@ -102,8 +102,9 @@ node .claude/skills/reverse-backend/scripts/md2html.js report.md report.html "�
 ```
 
 - **HTML 변환**: Node.js만 있으면 동작 (외부 패키지 불필요).
-- **PDF 변환**: 헤드리스 Chromium/Chrome 필요. `PLAYWRIGHT_BROWSERS_PATH`, 표준 설치 경로, `CHROME_BIN`을 자동 탐색합니다. 없으면 PDF는 건너뛰고 HTML을 브라우저에서 인쇄(Ctrl/Cmd+P)해 PDF로 저장할 수 있습니다.
+- **PDF 변환**: 헤드리스 Chromium/Chrome 필요. `CHROME_BIN`(최우선) → Playwright 캐시(`PLAYWRIGHT_BROWSERS_PATH`, `~/.cache/ms-playwright`) → OS 표준 경로(리눅스/mac/Windows) 순으로 자동 탐색합니다. 없으면 PDF는 건너뛰고 HTML을 브라우저에서 인쇄(Ctrl/Cmd+P)해 PDF로 저장할 수 있습니다.
 - PDF는 `--headless=new` 모드로 렌더링됩니다(구 모드는 페이지네이션이 깨져 전체가 1페이지로 나오므로 사용 안 함).
+- ⚠️ **CJK 폰트 전제**: PDF는 렌더 시점에 글리프가 박제되므로, `node:22-slim` 같은 **맨 CI 컨테이너에는 한글 폰트가 없어 PDF에서 한글이 □(두부)로 깨집니다.** 컨테이너에 CJK 폰트를 설치하세요 — 예: `apt-get install -y fonts-noto-cjk`. (HTML은 열람자 머신 폰트를 쓰므로 영향 없음.)
 
 ## 표준 근거
 

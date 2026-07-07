@@ -77,8 +77,11 @@ function blocks(lines){
       const ordered=/^\s*\d+\.\s+/.test(line);const items=[];
       while(i<lines.length&&(/^\s*[-*]\s+/.test(lines[i])||/^\s*\d+\.\s+/.test(lines[i]))){
         let it=lines[i].replace(/^\s*([-*]|\d+\.)\s+/,"");
-        it=it.replace(/^\[ \]\s*/,'<input type="checkbox" disabled> ').replace(/^\[x\]\s*/i,'<input type="checkbox" checked disabled> ');
-        items.push(`<li>${inline(it)}</li>`);i++;
+        // Extract a task-list checkbox and emit its HTML OUTSIDE inline(), so esc() does not
+        // turn it into literal &lt;input&gt; text.
+        let box=""; const cb=it.match(/^\[( |x|X)\]\s+/);
+        if(cb){ box=`<input type="checkbox"${cb[1].toLowerCase()==="x"?" checked":""} disabled> `; it=it.slice(cb[0].length); }
+        items.push(`<li>${box}${inline(it)}</li>`);i++;
       }
       out.push(`<${ordered?"ol":"ul"}>${items.join("")}</${ordered?"ol":"ul"}>`);continue;
     }
