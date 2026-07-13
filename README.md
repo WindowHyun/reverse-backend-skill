@@ -99,6 +99,9 @@ node .claude/skills/reverse-backend/scripts/render.js report.md report "문서 �
 
 # HTML만
 node .claude/skills/reverse-backend/scripts/md2html.js report.md report.html "문서 제목"
+
+# 렌더러 회귀 테스트 (변환기 수정 시 실행 권장)
+node .claude/skills/reverse-backend/scripts/test.js
 ```
 
 - **HTML 변환**: Node.js만 있으면 동작 (외부 패키지 불필요).
