@@ -32,6 +32,27 @@ argument-hint: <파일_또는_디렉토리_경로>
 관련 코드는 실제로 활성화된 것인지 반드시 확인한다 (통째로 주석 처리된 구버전
 코드에서 권한 데코레이터를 찾아 "가드가 있다"고 오판하는 것이 가장 위험한 실수다).
 
+**먼저: 생성된 스키마가 있으면 그것을 ground truth로 우선 사용한다.** FastAPI/NestJS/Spring/
+ASP.NET 등은 대개 OpenAPI(`/openapi.json`, `/v3/api-docs`, Swagger)를 자동 생성한다. 이 스키마가
+있으면 엔드포인트·요청/응답 스펙의 1차 소스로 삼고, 코드 판독은 이를 보강·교차검증하는 데 쓴다
+(LLM grep보다 정확). 없거나 부분적일 때만 아래 신호로 코드에서 직접 추출한다.
+
+**프레임워크별 신호 참조표** (grep 앵커 — 스택에 맞는 행을 사용; 표에 없으면 관용구를 유추):
+
+| 스택 | 라우트(1-A) | 인증 가드/발급(1-E·1-F) | 직렬화/노출(1-B·1-D) | 실행 실패 모드(1-L) |
+|------|-------------|--------------------------|------------------------|----------------------|
+| Express/Node | `router.METHOD`, `app.use` | `requireAuth` 미들웨어 / `jwt.sign` | `res.json(obj)` 전체 반환 | 모듈 로드 throw, `connect` 부재 |
+| Django/DRF | `path()`+뷰, `@api_view` | `permission_classes` / SimpleJWT `TokenObtainPairView` | serializer `fields`/`__all__` | `settings` 오류, 마이그레이션 |
+| FastAPI | `@app.get` 데코, `app.routes`, `/openapi.json` | `Depends(oauth2_scheme)` / 토큰 발급 라우트 | **`response_model`은 과노출 방지 가드(결함 아님)**; 없이 ORM 직반환이 위험 | 임포트/`Depends` 해석 실패 |
+| Spring Boot | `@GetMapping`/`@RequestMapping`, actuator `/mappings` | `SecurityFilterChain`·`@PreAuthorize` / `JwtEncoder` | `@Entity` 직반환 + `@JsonIgnore` 누락이 위험 | **컨텍스트 초기화 실패**(런타임 throw 아님) |
+| Go (net/http, gin, chi) | `mux.HandleFunc`, `r.Get`; **핸들러 내부 `if r.Method=="POST"` 분기 확인** | 미들웨어 체인 / 토큰 서명 | struct `json:"-"` 태그 유무 | **빌드타임 실패**(컴파일) |
+| Rails | `config/routes.rb`, `rails routes` | `before_action :authenticate` | `as_json`/serializer, `render json:` | 초기화·마이그레이션 실패 |
+| ASP.NET | `[HttpGet]`/`MapGet` | `[Authorize]` + bearer 설정 | DTO projection 유무 | DI/구성 검증 실패 |
+
+주의: 이 표의 신호는 프레임워크마다 실패 모드·직렬화 관용구가 달라 **JS 관용구(모듈 로드 throw,
+`res.json` 전체 반환)를 다른 스택에 그대로 적용하면 오탐/누락**이 난다. 특히 FastAPI `response_model`·
+Spring DTO·Go json 태그처럼 "노출을 오히려 막는 장치"를 결함으로 오판하지 말 것.
+
 **1-A. API 엔드포인트**: 라우트 정의(경로, HTTP 메서드, 핸들러)와 그 근거 파일.
 프레임워크가 메서드를 명시하지 않는 구조(예: Django `path()`)라면 핸들러 함수/클래스를
 직접 읽어 메서드를 확인한다. **가능하면 프레임워크 라우트 열거로 교차검증한다**
@@ -177,6 +198,13 @@ Slack(`xox...`) 같은 키 패턴이 코드에 하드코딩돼 있는지도 확�
   결제 무결성) / 🟠 High(BOLA·리소스 소모·민감필드 노출) / 🟡 Medium(모범사례 위반) /
   ⚪ 해당 낮음. 이모지만 쓰고 기준을 안 밝히면 안 된다.
 - 같은 결함을 6곳에 반복 기재해 노이즈를 만들지 말 것 — 상세는 5장에 한 번, 나머지는 참조.
+- **심각도 일관성**: 한 결함에는 하나의 심각도(🔴/🟠/🟡/⚪)만 부여하고, Step 5 "크리티컬 N건"은
+  🔴로 표기한 것만 센다. 예를 들어 BOLA를 어떤 곳은 🟠, 다른 곳은 🔴로 흔들지 말 것.
+- **확정 vs `[추정]` 경계**: 코드 라인으로 직접 입증되면 확정, 관용·정황 추론이면 `[추정]`. 예:
+  "서버측 금액 검증 코드가 없음"을 라인으로 보였으면 확정, "남용 방지가 없을 것"은 `[추정]`.
+- **출력 언어**: 별도 지시가 없으면 사용자와 대화한 언어로 리포트를 작성한다(코드 주석 언어와 무관).
+- **분할 분석 재조립**(Step 0.3으로 모듈별 분석 시): 엔드포인트 번호·심각도·As-Is 스냅샷(단일 커밋
+  해시)을 문서 전체에서 하나의 연속 체계로 통합하고, 모듈 경계로 중복/누락이 없는지 최종 병합에서 확인한다.
 - 시크릿은 절대 값으로 포함하지 않는다.
 
 ### Step 4 — 산출물 렌더링 (Markdown + HTML + PDF)
@@ -185,19 +213,24 @@ Slack(`xox...`) 같은 키 패턴이 코드에 하드코딩돼 있는지도 확�
 그것을 HTML·PDF로 변환한다. 번들 스크립트가 의존성 없이 처리한다(HTML은 항상,
 PDF는 Chromium이 있을 때).
 
-1. Step 3 문서를 `<이름>.md`로 저장한다.
-2. 렌더 스크립트를 실행한다. **작업 디렉토리는 분석 대상 레포이므로 상대경로가 아니라
-   스킬 base 디렉토리의 절대경로로 호출한다** (스킬 실행 시 헤더에 출력되는
-   `Base directory for this skill: <경로>` 값을 `<SKILL_DIR>`로 사용):
+1. Step 3 문서를 절대경로 `<출력_basename>.md`로 저장한다. **출력 위치는 임의로 정하되
+   절대경로로 지정**한다(작업 디렉토리 = 분석 대상 레포이므로, 산출물을 그 안에 남기지
+   않으려면 별도 출력 디렉토리의 절대경로를 쓴다).
+2. 렌더 스크립트의 절대경로를 확보해 실행한다. 스크립트는 **이 SKILL.md와 같은 디렉토리의
+   `scripts/` 아래**에 있다. 다음 순서로 경로를 구한다:
+   1. 스킬 실행 헤더에 `Base directory for this skill: <경로>`가 있으면 그 값이 `<SKILL_DIR>`.
+   2. 없으면 찾는다: `find . -path '*reverse-backend/scripts/render.js' 2>/dev/null | head -1`
+      (분석 대상 레포에 스킬이 함께 있는 경우) 또는 `~/.claude/skills`·프로젝트 `.claude/skills`
+      아래에서 동일 검색.
+   3. 그래도 못 찾거나 Node가 없으면 **PDF/HTML 렌더를 건너뛰고 `.md`만 전달**한다(렌더는 옵션).
 
    ```
-   node "<SKILL_DIR>/scripts/render.js" <이름>.md <출력_basename> "<문서 제목>"
+   node "<SKILL_DIR>/scripts/render.js" <절대>.md <절대_출력_basename> "<문서 제목>"
    ```
 
-   - `<출력_basename>.html` — 항상 생성 (self-contained, 인쇄용 CSS 포함).
-   - `<출력_basename>.pdf` — Chromium/Chrome 발견 시 생성. `PLAYWRIGHT_BROWSERS_PATH`
-     또는 표준 경로(`/usr/bin/chromium`, `google-chrome` 등), `CHROME_BIN`을 자동 탐색.
-   - HTML만 필요하면 `node "<SKILL_DIR>/scripts/md2html.js" <이름>.md <출력>.html "<제목>"`.
+   - 산출물은 `<절대_출력_basename>.html`(항상) / `.pdf`(Chromium 발견 시)로 **출력 basename 옆**에 떨어진다.
+   - Chromium 탐색: `CHROME_BIN`(최우선) → Playwright 캐시 → OS 표준 경로. 셸/헤드리스 셸도 인식.
+   - HTML만 필요하면 `node "<SKILL_DIR>/scripts/md2html.js" <절대>.md <절대_출력>.html "<제목>"`.
 
 3. **PDF는 반드시 `--headless=new` 경로로 생성**된다(구 headless 모드는 페이지네이션이
    깨져 전체가 1페이지로 나옴 — render.js가 이미 이 옵션을 사용). PDF 페이지 수가 1이면
@@ -248,4 +281,4 @@ PDF는 Chromium이 있을 때).
 
 주의: 위 표준은 API 설계·보안의 대표적 기준일 뿐 전부는 아니다. 인증/세션 세부는
 OWASP ASVS, 코드 취약점 분류는 CWE 등으로 추가 대조가 필요할 수 있으며, 그런 항목은
-`[별도 확인 필요]`로 남긴다.
+`[정보 없음 — 별도 확인 필요]`로 남긴다.

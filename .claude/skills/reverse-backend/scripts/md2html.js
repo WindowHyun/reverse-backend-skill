@@ -1,6 +1,11 @@
 // Minimal, dependency-free Markdown -> self-contained HTML converter.
-// Supports: headings, hr, fenced code, GFM tables, blockquotes (incl. nested),
-// bullet/numbered/checkbox lists, **bold**, `code`, [text](url), bare URLs.
+// Scope: the subset this skill's generated reports use, NOT full CommonMark.
+// Supports: headings, hr, ``` fenced code, GFM tables (pipes in `code`/escaped \| ok),
+// nested blockquotes, bullet/numbered/checkbox lists, **bold**, `code`, [text](url), bare URLs.
+// Known limitations (by design — reports rarely hit these): no nested list indentation
+// (flattened), single-backtick code spans only, ``` fences only (no 4+/~~~), **bold** cannot
+// contain a literal '*', list ordered/unordered decided by its first line. Full CommonMark
+// would require vendoring a real parser, which the no-dependencies constraint forbids.
 // Usable as a module: require(...).convert(mdString, title) -> htmlString
 // Or as CLI: node md2html.js <in.md> <out.html> "<title>"
 "use strict";
@@ -38,7 +43,14 @@ function inline(s){
   return s;
 }
 function tableHTML(rows){
-  const cells = r => r.replace(/^\||\|$/g,"").split("|").map(c=>c.trim());
+  // Split a row on unescaped cell-delimiter pipes only. Pipes inside inline code
+  // (`a|b`) and escaped pipes (\|) must NOT split the cell. Protect both, split, restore.
+  const cells = r => {
+    r = r.replace(/\\\|/g, "\x01");                     // escaped pipe -> placeholder
+    r = r.replace(/`[^`]*`/g, m => m.replace(/\|/g, "\x01")); // pipe inside inline code -> placeholder
+    return r.replace(/^\||\|$/g, "").split("|")
+            .map(c => c.trim().replace(/\x01/g, "|"));   // restore literal pipes inside cells
+  };
   const head = cells(rows[0]);
   const body = rows.slice(2).map(cells);
   let t = "<table><thead><tr>";

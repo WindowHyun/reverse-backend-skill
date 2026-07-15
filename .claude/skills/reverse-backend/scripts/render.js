@@ -35,13 +35,22 @@ function findChrome(){
     path.join(os.homedir(), "Library", "Caches", "ms-playwright")].filter(Boolean);
   const subs = ["chrome-linux/chrome", "chrome-mac/Chromium.app/Contents/MacOS/Chromium",
     "chrome-win/chrome.exe"];
+  const shellSubs = ["chrome-linux/headless_shell",
+    "chrome-headless-shell-linux64/chrome-headless-shell",
+    "chrome-headless-shell-mac-x64/chrome-headless-shell"];
+  // Prefer full chromium (newest version first), then headless-shell (some CI has only this).
+  const full = [], shell = [];
   for(const pw of pwDirs){
     let entries = [];
     try { entries = fs.readdirSync(pw); } catch { continue; }
+    entries.sort().reverse(); // newest version first (lexical, same-length version dirs)
     for(const d of entries){
-      if(/^chromium(?!_headless)/.test(d)) for(const s of subs) cands.push(path.join(pw, d, s));
+      if(!/^chromium/.test(d)) continue;
+      if(/headless/.test(d)) for(const s of shellSubs) shell.push(path.join(pw, d, s));
+      else for(const s of subs) full.push(path.join(pw, d, s));
     }
   }
+  cands.push(...full, ...shell);
   // Common system install locations across OSes.
   cands.push(
     "/usr/bin/chromium", "/usr/bin/chromium-browser", "/usr/bin/google-chrome",
@@ -63,12 +72,14 @@ if(!chrome){
 // Remove any stale PDF first, so a previous run's file can never be mistaken for fresh output.
 try { fs.rmSync(pdfPath, { force: true }); } catch {}
 let launchErr = null, stderr = "";
+// headless-shell is already headless and rejects --headless=new; full chrome needs it
+// (--headless=new gives correct pagination; the old headless mode emits a single page).
+const isShell = /headless[_-]shell/.test(path.basename(chrome));
+const baseArgs = ["--no-sandbox", "--disable-gpu", "--no-pdf-header-footer",
+  "--print-to-pdf=" + pdfPath, pathToFileURL(path.resolve(htmlPath)).href];
 try {
-  // --headless=new is required for correct pagination; the old headless mode emits a single page.
-  const out = execFileSync(chrome, [
-    "--headless=new", "--no-sandbox", "--disable-gpu", "--no-pdf-header-footer",
-    "--print-to-pdf=" + pdfPath, pathToFileURL(path.resolve(htmlPath)).href,
-  ], { stdio: ["ignore", "ignore", "pipe"], timeout: 60000 });
+  const out = execFileSync(chrome, isShell ? baseArgs : ["--headless=new", ...baseArgs],
+    { stdio: ["ignore", "ignore", "pipe"], timeout: 60000 });
   void out;
 } catch (e) {
   launchErr = e; // may be a benign non-zero exit (e.g. dbus warnings) even when the PDF was written
