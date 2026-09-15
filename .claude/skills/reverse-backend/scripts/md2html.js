@@ -12,6 +12,10 @@
 const fs = require("fs");
 
 function esc(s){return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");}
+// esc() deliberately leaves '"' alone (it's not markup outside an attribute), so any href
+// value built from esc()'d text must go through this before landing inside href="...", or a
+// literal '"' in the source breaks out of the attribute (e.g. `[x](https://e/"onfocus=alert(1))`).
+function attrEsc(s){return s.replace(/"/g,"&quot;");}
 // Trim trailing sentence punctuation and unbalanced ')' off an autolinked URL,
 // returning [href, trailingText]. Keeps balanced parens (e.g. Wikipedia URLs).
 function trimUrl(url){
@@ -30,14 +34,16 @@ function inline(s){
   const codes = [];
   s = s.replace(/`([^`]+)`/g, (_,c)=>{ codes.push(c); return `\x00${codes.length-1}\x00`; });
   s = s.replace(/\*\*([^*]+)\*\*/g, (_,c)=>`<strong>${c}</strong>`);
-  s = s.replace(/\[([^\]]+)\]\((https?:[^)]+)\)/g, (_,t,u)=>`<a href="${u}">${t}</a>`);
+  s = s.replace(/\[([^\]]+)\]\((https?:[^)"]+)\)/g, (_,t,u)=>`<a href="${attrEsc(u)}">${t}</a>`);
   // Autolink bare URLs, but not ones already inside a tag we just emitted.
-  // After esc() the only real '>' / '"' / '=' come from those tags, so excluding
-  // them in the lookbehind prevents double-wrapping (e.g. link text that is a URL).
+  // After esc() the only real '>' / '=' come from those tags (esc() leaves '"' alone — see
+  // attrEsc), so excluding them in the lookbehind prevents double-wrapping (e.g. link text
+  // that is a URL). '"' is excluded from the URL charclass below so a quote in the source
+  // (e.g. a quoted URL in prose) ends the autolink instead of being swallowed into href.
   // \x00 excluded so a URL stops at a code placeholder boundary (URL directly followed by `code`).
-  s = s.replace(/(?<!["=(>])\bhttps?:\/\/[^\s<\x00]+/g, (m)=>{
+  s = s.replace(/(?<!["=(>])\bhttps?:\/\/[^\s<>"\x00]+/g, (m)=>{
     const [url, trail] = trimUrl(m);
-    return `<a href="${url}">${url}</a>${trail}`;
+    return `<a href="${attrEsc(url)}">${url}</a>${trail}`;
   });
   s = s.replace(/\x00(\d+)\x00/g, (_,i)=>`<code>${codes[+i]}</code>`);
   return s;

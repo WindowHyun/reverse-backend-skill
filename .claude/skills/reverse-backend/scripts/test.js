@@ -109,6 +109,16 @@ console.log("md2html — rendering regressions:");
   const full = convert("`code1` mid `code2`", "t");
   check("no NUL placeholder leak", !full.includes("\x00"));
 }
+// 17. A literal '"' in a URL cannot break out of the href attribute (HTML/attr injection).
+{
+  const b1 = body('[클릭](https://evil.com/"autofocus onfocus="alert(1))', "t");
+  check("md-link quote does not break out of href", !/onfocus=/.test(b1) || !b1.includes('" autofocus'));
+  check("md-link with quoted url does not open an <a> tag", !b1.includes("<a "));
+  const b2 = body('see https://evil.com/"onmouseover="alert(1) end', "t");
+  check("autolink stops before the quote", b2.includes('<a href="https://evil.com/">'));
+  check("autolink does not inject onmouseover into the tag", !/<a\b[^>]*onmouseover/.test(b2));
+  check("trailing quoted text stays literal, not re-parsed as markup", b2.includes('</a>"onmouseover="alert(1) end'));
+}
 
 console.log("\nrender.js — structural invariants:");
 {
