@@ -76,7 +76,7 @@ cp -r reverse-backend-skill/.claude/skills/reverse-backend ~/.claude/skills/
 
 ## 안전 원칙
 
-- 🚫 **시크릿 값은 절대 문서에 포함하지 않습니다.** 파일 경로와 패턴 종류만 보고합니다.
+- 🚫 **시크릿 값은 절대 문서에 포함하지 않습니다.** 파일 경로와 패턴 종류만 보고합니다. 스캔도 `grep -l`/`cut`으로 위치만 뽑고 `.env` 등을 열지 않아, 값이 대화 기록·도구 출력에 남지 않도록 합니다.
 - 🔍 **주석 처리된 죽은 코드를 활성 동작으로 오인하지 않습니다.** 특히 인증 가드는 실제 활성 여부를 직접 확인합니다.
 - 🏷 **이름만으로 기능을 단정하지 않습니다.** `worker`/`consumer` 같은 이름이라도 실제 로직을 읽어 확인합니다.
 - 🏷 근거가 있으면 코드 위치를 명시하고, 불충분하면 `[추정]`, 코드에 없으면 `[정보 없음 — 별도 확인 필요]` 로 표기합니다.
@@ -90,6 +90,8 @@ cp -r reverse-backend-skill/.claude/skills/reverse-backend ~/.claude/skills/
 | `.md` | 항상 | 정본, git 커밋·수정용 |
 | `.html` | 항상 (Node 필요) | 인쇄용 CSS 포함, self-contained |
 | `.pdf` | Chromium/Chrome 발견 시 | 배포·공유용 (8쪽 예시) |
+
+**기본 저장 위치**: 별도 지정이 없으면 `<레포 루트>/reverse-backend-report/reverse-backend-<레포명>-<YYYYMMDD>.{md,html,pdf}` 입니다(같은 이름이 있으면 `-2`, `-3` 부여). 보안 점검 결과가 담겨 있으므로 이 디렉토리를 `.gitignore`에 추가해 커밋되지 않게 하세요. 위치를 직접 지정하면 그대로 따릅니다.
 
 내부적으로 다음 스크립트를 사용합니다 (npm 패키지 의존성 없음):
 
