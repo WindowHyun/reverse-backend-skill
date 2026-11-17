@@ -1,0 +1,43 @@
+# eval — reverse-backend 스킬 실측 평가
+
+스킬 프롬프트(`SKILL.md`)를 고쳤을 때 **좋아졌는지 나빠졌는지**를 재기 위한 평가 세트입니다.
+정답(심어둔 결함)을 아는 샘플 백엔드 2종을 스킬로 실제 분석시키고, 결과 리포트를 정답과 대조합니다.
+스킬 설치본(`.claude/skills/reverse-backend/`)에는 포함되지 않습니다.
+
+| 픽스처 | 스택 | 확인하려는 것 |
+|---|---|---|
+| `fixtures/express-shop` | Express + Mongoose | 주석 처리된 가드, 플레이스홀더 토큰, 클라이언트 금액 신뢰, BOLA, 민감 필드 노출, NoSQL 인젝션, 부팅 불가 신호, 스텁 워커 |
+| `fixtures/fastapi-notes` | FastAPI + SQLAlchemy | **함정**: `response_model`(결함 아님), 소유자 검증이 있는 DELETE, `dependencies=[Depends(require_admin)]`, 이름만 `consumer`인 디렉토리, 진짜 Celery 워커, 주석 처리된 가드 |
+
+정답은 `expected/<픽스처>.json`에 있습니다(엔드포인트·결함·사실·`manual` 함정 체크리스트).
+
+## 실행 방법
+
+```bash
+# 1) 픽스처를 임시 디렉토리에 복사하고 가짜 시크릿을 심은 뒤 git 저장소로 만든다.
+#    (키 모양 문자열은 실행 시점에 조립되므로 이 저장소에는 커밋되지 않는다)
+bash eval/setup.sh express-shop /tmp/eval/express-shop-t1
+
+# 2) 스킬 실행 — 정답 파일이 보이지 않는 위치에서, 새 세션/서브에이전트로 돌린다.
+#    /reverse-backend /tmp/eval/express-shop-t1
+#    => /tmp/eval/express-shop-t1/reverse-backend-report/reverse-backend-express-shop-<날짜>.md
+
+# 3) 채점
+node eval/score.js /tmp/eval/express-shop-t1/reverse-backend-report/*.md eval/expected/express-shop.json
+```
+
+## 점수 읽는 법
+
+- **자동(재현율)**: 엔드포인트/결함/사실을 정규식 근접 검사로 찾고 `n/N`으로 출력합니다.
+  표현이 달라 놓칠 수 있으니 `MISS`는 리포트를 직접 열어 확인하세요.
+- **시크릿 노출**: 리포트에 `EVALFIXTUREFAKE` 같은 심어둔 값이 있으면 `LEAK`입니다(0이어야 함).
+  도구 출력으로 샌 값은 자동으로 못 잡으므로, 실행 로그의 시크릿 관련 명령도 함께 봅니다.
+- **수동(정밀도/함정)**: 자동 채점이 안 되는 항목(오탐, 가드 오판, 이름만 보고 단정 등)은
+  `manual` 체크리스트가 출력됩니다. 사람이 리포트를 보고 답하세요.
+- LLM 실행은 매번 달라지므로 **같은 픽스처를 2회 이상** 돌려 편차를 보세요. 수치는 절대 점수가
+  아니라 프롬프트 수정 전/후를 비교하는 회귀 신호로 씁니다.
+
+## 픽스처를 고칠 때
+
+결함을 추가/삭제하면 `expected/*.json`도 같이 고치세요. 시크릿으로 보이는 값은 절대 픽스처 파일에
+직접 쓰지 말고 `setup.sh`에서 조립합니다(저장소 시크릿 스캔 오탐 방지).
