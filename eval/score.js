@@ -34,7 +34,13 @@ function near(spec) {
   return false;
 }
 function hasCheck(c) {
-  if (c.near && !near(c.near)) return false;
+  // A check passes via its proximity rule OR any single-line "any" regex (reports often put the
+  // endpoint and the finding in different sections, beyond the proximity window).
+  if (c.near || c.any) {
+    const viaNear = c.near && near(c.near);
+    const viaAny = c.any && c.any.some(r => new RegExp(r, "i").test(report));
+    if (!(viaNear || viaAny)) return false;
+  }
   if (c.also && !c.also.every(r => new RegExp(r, "i").test(report))) return false;
   return true;
 }
