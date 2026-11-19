@@ -111,10 +111,23 @@ Slack(`xox...`) 같은 키 패턴이 코드에 하드코딩돼 있는지도 확�
 부족하다. 도구 출력은 대화 기록에 남으므로 값이 화면에 나오는 순간 이미 노출이다.
 **순서: 1-K 스캔을 소스 파일을 읽기 전에 가장 먼저 실행한다.** 어느 파일에 시크릿이 있는지
 모른 채 소스를 통째로 읽으면(`cat`·`cat -n`·여러 파일 일괄 Read) 값이 그대로 출력된다.
-- **패턴이 걸린 소스 파일은 열지 않는다**(예: `config_local.py`, `legacy.js` — 시크릿 후보
-  파일 목록에 없는 평범한 소스여도 마찬가지). Read/`cat`/`cat -n`/`head`/일괄 읽기에서
-  제외하고, 코드 구조가 필요하면 값을 가린 채로만 본다:
-  `sed -E 's/AKIA[0-9A-Z]{16}/<AWS-KEY>/g; s/AIza[0-9A-Za-z_-]{35}/<GOOGLE-KEY>/g; s/sk_live_[0-9A-Za-z]+/<STRIPE-KEY>/g; s/ghp_[0-9A-Za-z]{36}/<GITHUB-TOKEN>/g; s/xox[baprs]-[0-9A-Za-z-]+/<SLACK-TOKEN>/g' <파일>`
+- **마스킹 열람만 허용되는 파일**: ① 키 패턴 스캔(위)에 걸린 파일(예: `config_local.py`,
+  `legacy.js` — 시크릿 후보 목록에 없는 평범한 소스여도 마찬가지), ② **설정·환경 파일**
+  (`.env*`, `application*.yml|yaml|properties`, `config/` 아래 json·yaml·toml·ini·conf), ③ 아래
+  "일반 키 이름 스캔"에 걸린 파일. 이 파일들은 Read/`cat`/`cat -n`/`head`/일괄 읽기에서 **제외**하고,
+  구조가 필요하면 값을 가린 채로만 본다(벤더 키 패턴 + `password·secret·token·api-key·credential`
+  이름의 키 값 + `user:pass@host`의 비밀번호를 가린다):
+  `sed -E 's/AKIA[0-9A-Z]{16}/<AWS-KEY>/g; s/AIza[0-9A-Za-z_-]{35}/<GOOGLE-KEY>/g; s/sk_live_[0-9A-Za-z]+/<STRIPE-KEY>/g; s/ghp_[0-9A-Za-z]{36}/<GITHUB-TOKEN>/g; s/xox[baprs]-[0-9A-Za-z-]+/<SLACK-TOKEN>/g; s#(://[^:/@ ]+:)[^@ ]+@#\1<MASKED>@#g; s/((pass(word|wd)?|secret|token|api[-_]?key|private[-_]?key|credential)[A-Za-z0-9_.-]*[[:space:]]*[:=][[:space:]]*).+/\1<MASKED>/I' <파일>`
+  벤더 패턴만 가리는 `sed`로는 평문 `password:`·`secret:` 값이 그대로 출력되므로 위 전체 식을 쓴다.
+- **일반 키 이름 스캔**(벤더 패턴이 없는 평문 비밀번호·서명키 탐지, 위치만 출력):
+  `grep -rnEi '(pass(word|wd)?|secret|token|api[-_]?key|private[-_]?key|credential)[A-Za-z0-9_.-]*[[:space:]]*[:=][[:space:]]*["'"'"']?[A-Za-z0-9/+_.@-]{6,}' --exclude-dir=.git --exclude-dir=node_modules . | cut -d: -f1,2`
+  → `파일:라인`만 나온다. 오탐(`password: string` 같은 타입 선언)이 섞여도 괜찮다 — 이 파일들을 마스킹으로
+  열 뿐이다.
+- **폴백(기본값) 존재 여부는 값 없이 구조로 확인**: 마스킹하면 `os.environ.get("X", "기본값")`의 기본값
+  유무가 가려진다. 필요하면 리터럴만 치환해 본다:
+  `grep -nE '<키 이름>' <파일> | sed -E 's/(["'"'"'])[^"'"'"']*\1/\1<LIT>\1/g; s/(\$\{[A-Za-z0-9_]+:)[^}]*\}/\1<DEFAULT>}/g'`
+  → `environ.get("<LIT>", "<LIT>")`, `${JWT_SECRET:<DEFAULT>}`처럼 기본값이 있다는 사실만 보인다.
+  기본값이 있으면 5.1/API8에 "하드코딩 폴백 존재(값 미기재)"로 적는다.
 - **금지**: 시크릿 후보 파일(`.env*`, `*.pem`, `*.key`, `id_rsa*`, `secrets.json`,
   `credentials.json`)을 `cat`/Read로 열기, 키 패턴 `grep`에 `-o`·`-A`·`-B`·`-C` 또는
   매치 내용을 그대로 내보내는 출력 사용. 시크릿 파일 안의 **변수명**이 필요하면 내용을 열지
