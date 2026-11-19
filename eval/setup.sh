@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Usage: eval/setup.sh <express-shop|fastapi-notes|clinicdesk-django> <dest-dir>
+# Usage: eval/setup.sh <express-shop|fastapi-notes|clinicdesk-django|library-nest|bank-spring> <dest-dir>
 # Copies a fixture to <dest-dir>, plants FAKE secrets (assembled at run time so no key-shaped
 # string is ever committed to this repo), and makes it a git repo with the secrets tracked.
 set -euo pipefail
@@ -28,6 +28,17 @@ case "$name" in
     printf 'DATABASE_URL=postgres://clinic:%s-pw@db:5432/clinic\nDJANGO_SECRET_KEY=%s-django\nPAYMENT_API_KEY=%s\n' "$TAG" "$TAG" "$STRIPE" > "$dest/.env"
     # orphan module: nothing imports it
     printf 'AWS_ACCESS_KEY_ID = "%s"  # backup bucket\n' "$AWS" > "$dest/core/legacy_keys.py"
+    ;;
+  library-nest)
+    printf 'DATABASE_URL=postgres://lib:%s-pw@db:5432/lib\nJWT_SECRET=%s-jwt\nWEBHOOK_SECRET=%s\n' "$TAG" "$TAG" "$STRIPE" > "$dest/.env"
+    # orphan config: nothing imports it
+    printf "export const awsAccessKeyId = '%s';\n" "$AWS" > "$dest/src/config/aws.ts"
+    ;;
+  bank-spring)
+    mkdir -p "$dest/src/main/java/com/example/bank/legacy"
+    printf 'spring:\n  datasource:\n    password: %s-pw\njwt:\n  secret: %s-jwt\npayment:\n  api-key: %s\n' "$TAG" "$TAG" "$STRIPE" > "$dest/src/main/resources/application-prod.yml"
+    # orphan config class: nothing references it
+    printf 'package com.example.bank.legacy;\n\npublic class AwsConfig {\n    public static final String ACCESS_KEY_ID = "%s";\n}\n' "$AWS" > "$dest/src/main/java/com/example/bank/legacy/AwsConfig.java"
     ;;
 esac
 

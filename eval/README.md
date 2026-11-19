@@ -8,6 +8,8 @@
 |---|---|---|
 | `fixtures/express-shop` | Express + Mongoose | 주석 처리된 가드, 플레이스홀더 토큰, 클라이언트 금액 신뢰, BOLA, 민감 필드 노출, NoSQL 인젝션, 부팅 불가 신호, 스텁 워커 |
 | `fixtures/clinicdesk-django` | Django/DRF 7개 앱, `.py` 55개 | **대규모 경로(>30파일 분할 분석)**, 뷰셋의 암묵적 라우트, 반복문으로 만드는 동적 라우트(`EXPORT_REGISTRY`), 전역 `DEFAULT_PERMISSION_CLASSES`, 미들웨어 체인(테넌트 헤더 신뢰), 뷰셋 스코프를 우회하는 `@action`, 웹소켓 컨슈머, `ready()`가 import하지 않는 죽은 signal, `Procfile`로 기동되는 Celery, 시그니처를 읽기만 하는 웹훅 |
+| `fixtures/library-nest` | NestJS 10 (TypeScript, `.ts` 42개) | 선언형 데코레이터 스택: 전역 접두사 `api` + URI 버전(`/api/v2/books/:id`만 존재, `/health`는 접두사 제외), 전역 `APP_GUARD` + `@Public()` 옵트아웃(클래스 전체에 걸린 `@Public`), `@Roles`만 있고 `RolesGuard`가 없는 장식용 메타데이터, `ValidationPipe`에 `whitelist` 없음(대량 할당), `ClassSerializerInterceptor`가 가리지만 `getRawMany`가 우회, `ScheduleModule` 누락으로 죽은 `@Cron`, 실제 Bull 프로세서, 올바르게 검증되는 HMAC 웹훅, 전역 Throttler + 로그인만 `@SkipThrottle` |
+| `fixtures/bank-spring` | Spring Boot 3 / Security 6 (`.java` 34개) | 설정 클래스에 흩어진 보안: **URL 매처 순서로 가려진 `/api/admin/**`**, `@EnableMethodSecurity`는 켜져 있으나 `securedEnabled` 없어 비활성인 `@Secured`, 정상 동작하는 `@PreAuthorize`(관리자 전용·소유자 검사 `@accessChecker`), `/api/public/**` 아래 잘못 놓인 고객 일괄 내보내기, Actuator `include=*`+`permitAll`+`show-values=ALWAYS`, `@EnableScheduling` 누락으로 죽은 `@Scheduled`, 실제 `@KafkaListener`, RFC 9457 `ProblemDetail` |
 | `fixtures/fastapi-notes` | FastAPI + SQLAlchemy | **함정**: `response_model`(결함 아님), 소유자 검증이 있는 DELETE, `dependencies=[Depends(require_admin)]`, 이름만 `consumer`인 디렉토리, 진짜 Celery 워커, 주석 처리된 가드 |
 
 정답은 `expected/<픽스처>.json`에 있습니다(엔드포인트·결함·사실·`manual` 함정 체크리스트).
