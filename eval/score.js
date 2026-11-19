@@ -67,6 +67,17 @@ for (const t of transcripts) {
   tleaks += n;
   console.log(`Secret-value occurrences in transcript ${t}: ${n}${n ? "  <-- LEAKED INTO TOOL OUTPUT" : " (ok)"}`);
 }
+// ID continuity: serial ids like E-07 / F-12 / S-3 must be gap-free (checked for prefixes with >= 5 ids).
+const idMap = {};
+for (const m of report.matchAll(/\b([EFSMT]|WS)-(\d{1,3})\b/g)) (idMap[m[1]] ||= new Set()).add(+m[2]);
+const gaps = [];
+for (const [pre, set] of Object.entries(idMap)) {
+  const max = Math.max(...set);
+  if (set.size < 5) continue;
+  const miss = []; for (let i = 1; i <= max; i++) if (!set.has(i)) miss.push(i);
+  if (miss.length) gaps.push(`${pre}-: missing ${miss.join(",")} (of 1..${max})`);
+}
+console.log(`ID continuity: ${gaps.length ? "GAPS " + gaps.join("; ") : "no gaps (ok)"}`);
 console.log(`\nSummary: endpoints ${eh}/${et}, flaws ${fh}/${ft} (critical ${ch}/${crit.length}), facts ${th}/${tt}, leaks ${leaks.length}${transcripts.length ? `, transcript leaks ${tleaks}` : ""}`);
 console.log("\nManual review (precision / traps) — answer each against the report:");
 (exp.manual || []).forEach((q, i) => console.log(`  [ ] M${i + 1}. ${q}`));
