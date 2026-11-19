@@ -7,6 +7,7 @@
 | 픽스처 | 스택 | 확인하려는 것 |
 |---|---|---|
 | `fixtures/express-shop` | Express + Mongoose | 주석 처리된 가드, 플레이스홀더 토큰, 클라이언트 금액 신뢰, BOLA, 민감 필드 노출, NoSQL 인젝션, 부팅 불가 신호, 스텁 워커 |
+| `fixtures/clinicdesk-django` | Django/DRF 7개 앱, `.py` 55개 | **대규모 경로(>30파일 분할 분석)**, 뷰셋의 암묵적 라우트, 반복문으로 만드는 동적 라우트(`EXPORT_REGISTRY`), 전역 `DEFAULT_PERMISSION_CLASSES`, 미들웨어 체인(테넌트 헤더 신뢰), 뷰셋 스코프를 우회하는 `@action`, 웹소켓 컨슈머, `ready()`가 import하지 않는 죽은 signal, `Procfile`로 기동되는 Celery, 시그니처를 읽기만 하는 웹훅 |
 | `fixtures/fastapi-notes` | FastAPI + SQLAlchemy | **함정**: `response_model`(결함 아님), 소유자 검증이 있는 DELETE, `dependencies=[Depends(require_admin)]`, 이름만 `consumer`인 디렉토리, 진짜 Celery 워커, 주석 처리된 가드 |
 
 정답은 `expected/<픽스처>.json`에 있습니다(엔드포인트·결함·사실·`manual` 함정 체크리스트).

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Usage: eval/setup.sh <express-shop|fastapi-notes> <dest-dir>
+# Usage: eval/setup.sh <express-shop|fastapi-notes|clinicdesk-django> <dest-dir>
 # Copies a fixture to <dest-dir>, plants FAKE secrets (assembled at run time so no key-shaped
 # string is ever committed to this repo), and makes it a git repo with the secrets tracked.
 set -euo pipefail
@@ -23,6 +23,11 @@ case "$name" in
   fastapi-notes)
     printf 'DATABASE_URL=postgresql://app:%s-pw@db/notes\nSECRET_KEY=%s-jwt\n' "$TAG" "$TAG" > "$dest/.env"
     printf 'GOOGLE_MAPS_KEY = "%s"\n' "$GOOG" > "$dest/app/config_local.py"
+    ;;
+  clinicdesk-django)
+    printf 'DATABASE_URL=postgres://clinic:%s-pw@db:5432/clinic\nDJANGO_SECRET_KEY=%s-django\nPAYMENT_API_KEY=%s\n' "$TAG" "$TAG" "$STRIPE" > "$dest/.env"
+    # orphan module: nothing imports it
+    printf 'AWS_ACCESS_KEY_ID = "%s"  # backup bucket\n' "$AWS" > "$dest/core/legacy_keys.py"
     ;;
 esac
 

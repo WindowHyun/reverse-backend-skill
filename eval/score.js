@@ -13,7 +13,7 @@ const report = fs.readFileSync(reportPath, "utf8");
 const exp = JSON.parse(fs.readFileSync(expPath, "utf8"));
 
 const reEsc = s => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-const SEG = "(?::\\w+|\\{\\w+\\}|<\\w+>|\\[\\w+\\])";
+const SEG = "(?::\\w+|\\{\\w+\\}|<[\\w:]+>|\\[\\w+\\])";
 function pathRe(p) {
   const body = p.split("/").filter(Boolean).map(s => /^[:{]/.test(s) ? SEG : reEsc(s)).join("/");
   return "/" + body + "/?(?![\\w{:<\\[/-])";
