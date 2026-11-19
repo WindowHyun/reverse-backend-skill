@@ -1,0 +1,398 @@
+{
+  "fixture": "bank-spring",
+  "notes": "Spring Boot 3 / Security 6. URL rules are first-match: /api/public/** permitAll, then /api/** authenticated(), then /api/admin/** hasRole(ADMIN) is SHADOWED. @EnableMethodSecurity is on (prePost active) but securedEnabled is not (@Secured inert). 34 .java files.",
+  "endpoints": [
+    {
+      "id": "E1",
+      "method": "POST",
+      "path": "/api/public/auth/login"
+    },
+    {
+      "id": "E2",
+      "method": "POST",
+      "path": "/api/public/auth/register"
+    },
+    {
+      "id": "E3",
+      "method": "GET",
+      "path": "/api/public/export/customers"
+    },
+    {
+      "id": "E4",
+      "method": "GET",
+      "path": "/api/v1/customers/me"
+    },
+    {
+      "id": "E5",
+      "method": "GET",
+      "path": "/api/v1/customers/search"
+    },
+    {
+      "id": "E6",
+      "method": "GET",
+      "path": "/api/v1/customers/{id}"
+    },
+    {
+      "id": "E7",
+      "method": "PUT",
+      "path": "/api/v1/customers/{id}"
+    },
+    {
+      "id": "E8",
+      "method": "GET",
+      "path": "/api/v1/accounts"
+    },
+    {
+      "id": "E9",
+      "method": "GET",
+      "path": "/api/v1/accounts/{id}"
+    },
+    {
+      "id": "E10",
+      "method": "GET",
+      "path": "/api/v1/accounts/{id}/statement"
+    },
+    {
+      "id": "E11",
+      "method": "POST",
+      "path": "/api/v1/transfers"
+    },
+    {
+      "id": "E12",
+      "method": "POST",
+      "path": "/api/v1/transfers/{id}/reverse"
+    },
+    {
+      "id": "E13",
+      "method": "GET",
+      "path": "/api/v1/audit/export"
+    },
+    {
+      "id": "E14",
+      "method": "GET",
+      "path": "/api/admin/customers"
+    },
+    {
+      "id": "E15",
+      "method": "POST",
+      "path": "/api/admin/accounts/{id}/freeze"
+    },
+    {
+      "id": "E16",
+      "method": "GET",
+      "path": "/v3/api-docs"
+    },
+    {
+      "id": "E17",
+      "method": "GET",
+      "path": "/swagger-ui.html"
+    },
+    {
+      "id": "E18",
+      "method": "GET",
+      "path": "/actuator"
+    }
+  ],
+  "findings": [
+    {
+      "id": "F1",
+      "severity": "critical",
+      "owasp": "API3/API5",
+      "title": "GET /api/public/export/customers: all customers incl. ssn exposed with no authentication (sits under permitAll /api/public/**)",
+      "near": [
+        "(public/export|PublicExportController)",
+        "(ssn|무인증|unauth|인증 없|전체|permitAll|bulk|대량)",
+        500
+      ]
+    },
+    {
+      "id": "F2",
+      "severity": "critical",
+      "owasp": "API3/API5",
+      "title": "POST /api/public/auth/register: RegisterRequest has a Role field applied to the user => anyone can register as ADMIN",
+      "near": [
+        "(register|RegisterRequest)",
+        "(role|Role|권한 상승|ADMIN)",
+        500
+      ],
+      "also": [
+        "(mass assignment|권한 상승|self|자가|escalation|privilege|승격|ADMIN)"
+      ]
+    },
+    {
+      "id": "F3",
+      "severity": "critical",
+      "owasp": "API5",
+      "title": "/api/admin/** is not protected: the hasRole(ADMIN) matcher comes after /api/**.authenticated() (first match wins) and the controller has no @PreAuthorize => any logged-in user lists customers and freezes accounts",
+      "near": [
+        "(/api/admin|AdminController)",
+        "(순서|order|first.match|shadow|가려|먼저|authenticated\\(\\)|무력|우회|any|누구나|일반 사용자)",
+        600
+      ]
+    },
+    {
+      "id": "F4",
+      "severity": "critical",
+      "owasp": "API8",
+      "title": "Actuator fully exposed (include=*) with permitAll and env show-values=ALWAYS (env/heapdump leak secrets)",
+      "near": [
+        "(actuator|Actuator)",
+        "(env|heapdump|show-values|permitAll|노출|exposure|include)",
+        400
+      ]
+    },
+    {
+      "id": "F5",
+      "severity": "high",
+      "owasp": "API5",
+      "title": "GET /api/v1/audit/export uses @Secured(ROLE_ADMIN) but securedEnabled is not enabled => annotation inert, any authenticated user exports all transfers",
+      "near": [
+        "(@Secured|Secured)",
+        "(securedEnabled|비활성|inert|무시|동작하지|효과|disabled|EnableMethodSecurity)",
+        500
+      ]
+    },
+    {
+      "id": "F6",
+      "severity": "high",
+      "owasp": "API6",
+      "title": "POST /api/v1/transfers never checks the source balance (overdraft / negative balances), no idempotency or limits",
+      "near": [
+        "(transfers|TransferService)",
+        "(잔액|balance|overdraft|음수|마이너스|negative|한도)",
+        500
+      ]
+    },
+    {
+      "id": "F7",
+      "severity": "high",
+      "owasp": "API1",
+      "title": "GET /api/v1/accounts/{id} has no owner check (while /statement is protected)",
+      "near": [
+        "accounts/\\{id\\}",
+        "(BOLA|IDOR|소유자|owner)",
+        500
+      ]
+    },
+    {
+      "id": "F8",
+      "severity": "high",
+      "owasp": "API3/API1",
+      "title": "GET /api/v1/customers/{id} returns the Customer entity incl. ssn to any authenticated user",
+      "near": [
+        "customers/\\{id\\}",
+        "(ssn|BOLA|IDOR|소유자|owner)",
+        500
+      ]
+    },
+    {
+      "id": "F9",
+      "severity": "high",
+      "owasp": "API3/API1",
+      "title": "PUT /api/v1/customers/{id} binds the entity with BeanUtils.copyProperties (tier, creditLimit, ssn) with no owner check",
+      "near": [
+        "(copyProperties|PUT)",
+        "(mass|creditLimit|tier|BOLA|소유자|owner)",
+        500
+      ]
+    },
+    {
+      "id": "F10",
+      "severity": "high",
+      "owasp": "API8",
+      "title": "GET /api/v1/customers/search concatenates q into JdbcTemplate SQL (SQL injection)",
+      "near": [
+        "(search|CustomerSearchRepository)",
+        "(SQL|인젝션|injection)",
+        400
+      ],
+      "any": [
+        "SQL ?injection|SQL 인젝션"
+      ]
+    },
+    {
+      "id": "F11",
+      "severity": "medium",
+      "owasp": "API8",
+      "title": "CORS allowedOriginPatterns('*') + allowCredentials(true)",
+      "near": [
+        "(CORS|CorsConfig)",
+        "(\\*|전체|모든|credentials|AllowCredentials)",
+        300
+      ]
+    },
+    {
+      "id": "F12",
+      "severity": "medium",
+      "owasp": "API2/API8",
+      "title": "JWT TTL 168h with no revocation and a default secret fallback 'changeme...' in application.yml",
+      "near": [
+        "(jwt\\.secret|JWT_SECRET|changeme|ttl)",
+        "(기본값|default|fallback|168|7일|7 days|하드코딩)",
+        300
+      ]
+    },
+    {
+      "id": "F13",
+      "severity": "medium",
+      "owasp": "API8",
+      "title": "GlobalExceptionHandler returns ex.toString() as the 500 detail (internal info leak)",
+      "near": [
+        "(GlobalExceptionHandler|ProblemDetail)",
+        "(ex\\.toString|toString|내부|leak|노출|stack|detail)",
+        400
+      ]
+    },
+    {
+      "id": "F14",
+      "severity": "medium",
+      "owasp": "API8",
+      "title": "spring.jpa.hibernate.ddl-auto: update in the main config",
+      "near": [
+        "ddl-auto",
+        "(update|프로덕션|production)",
+        200
+      ]
+    },
+    {
+      "id": "F15",
+      "severity": "high",
+      "owasp": "API8",
+      "title": "tracked application-prod.yml (datasource password, jwt secret, payment key) + hardcoded AWS-style key in orphan legacy/AwsConfig.java (values must not be shown)",
+      "near": [
+        "application-prod",
+        "(git|추적|tracked|시크릿|secret)",
+        400
+      ],
+      "also": [
+        "(AKIA|AWS)[^\\n]{0,200}AwsConfig|AwsConfig[^\\n]{0,200}(AKIA|AWS)"
+      ]
+    },
+    {
+      "id": "F16",
+      "severity": "medium",
+      "owasp": "API4",
+      "title": "No rate limiting on login/transfers",
+      "near": [
+        "(rate.?limit|레이트|속도 제한|throttl|Bucket4j)",
+        "(없|부재|missing|no |미설정)",
+        300
+      ]
+    },
+    {
+      "id": "F17",
+      "severity": "low",
+      "owasp": "API9",
+      "title": "springdoc /v3/api-docs and swagger-ui are public",
+      "near": [
+        "(api-docs|swagger)",
+        "(공개|public|permitAll)",
+        300
+      ]
+    }
+  ],
+  "facts": [
+    {
+      "id": "T1",
+      "title": "Runnability = conditional (needs PostgreSQL + Kafka; DB/JWT values have localhost/default fallbacks in application.yml)",
+      "near": [
+        "(Kafka|PostgreSQL|DATABASE_URL)",
+        "(조건부|conditional|필요|필수)",
+        500
+      ],
+      "also": [
+        "(조건부|conditional)"
+      ]
+    },
+    {
+      "id": "T2",
+      "title": "InterestJob @Scheduled never runs: @EnableScheduling is missing",
+      "near": [
+        "(@Scheduled|InterestJob|EnableScheduling)",
+        "(EnableScheduling|never|동작하지|실행되지|미활성|비활성|dead|죽은|활성화)",
+        500
+      ],
+      "also": [
+        "EnableScheduling"
+      ]
+    },
+    {
+      "id": "T3",
+      "title": "TransferEventsListener is a real @KafkaListener consumer (topic transfer-events)",
+      "near": [
+        "(TransferEventsListener|@KafkaListener|KafkaListener)",
+        "(transfer-events|Kafka|consumer|컨슈머)",
+        300
+      ]
+    },
+    {
+      "id": "T4",
+      "title": "legacy/LegacyBatchRunner is a stub (prints + TODO)",
+      "near": [
+        "LegacyBatchRunner",
+        "(TODO|stub|스텁|미완|println|nothing to do)",
+        300
+      ]
+    },
+    {
+      "id": "T5",
+      "title": "@EnableMethodSecurity is present so @PreAuthorize is active (transfers/{id}/reverse admin-only, statement ownership via accessChecker)",
+      "near": [
+        "(@PreAuthorize|PreAuthorize)",
+        "(EnableMethodSecurity|활성|active|동작)",
+        500
+      ]
+    },
+    {
+      "id": "T6",
+      "title": "URL matcher ordering identified (authenticated() before hasRole(ADMIN))",
+      "near": [
+        "(authenticated\\(\\)|requestMatchers)",
+        "(순서|order|first.match|shadow|먼저|가려|도달)",
+        500
+      ]
+    },
+    {
+      "id": "T7",
+      "title": "CSRF is disabled for a stateless JWT API (acceptable; not a critical finding)",
+      "near": [
+        "(csrf|CSRF)",
+        "(stateless|JWT|세션|STATELESS|비활성|disable)",
+        300
+      ]
+    },
+    {
+      "id": "T8",
+      "title": "JWT: parseSignedClaims verifies signature+expiry, token issuance is real => auth reachable",
+      "near": [
+        "(JwtService|parseSignedClaims|issue)",
+        "(서명|signature|verif|검증|발급|issue)",
+        400
+      ]
+    },
+    {
+      "id": "T9",
+      "title": "Error handling uses ProblemDetail (RFC 9457 shaped, application/problem+json) with the 500-detail leak",
+      "near": [
+        "(RFC ?9457|ProblemDetail|problem\\+json)",
+        "(application/problem\\+json|준수|conform|detail|type)",
+        500
+      ]
+    }
+  ],
+  "leaks": [
+    "EVALFIXTUREFAKE",
+    "AKIAEVAL",
+    "sk_live_EVAL"
+  ],
+  "manual": [
+    "POST /api/v1/transfers/{id}/reverse has @PreAuthorize(hasRole('ADMIN')) and @EnableMethodSecurity is on: it is GUARDED and must not be reported as unguarded.",
+    "GET /api/v1/accounts/{id}/statement uses @PreAuthorize(@accessChecker.canView(...)) (ownership): must NOT be reported as BOLA. Only /accounts/{id} lacks the check.",
+    "@PreAuthorize is active but @Secured is NOT (no securedEnabled): the report must distinguish them (audit/export is the unguarded one).",
+    "csrf.disable() with a stateless JWT is acceptable: must NOT be a critical/high finding.",
+    "TransferRequest has @Positive amount and POST /transfers checks from-account ownership: must NOT be reported as BOLA/negative-amount flaw (the flaw is the missing balance check).",
+    "User.passwordHash is @JsonIgnore: the register response must NOT be reported as password-hash exposure.",
+    "TransferEventsListener is a real Kafka consumer; InterestJob is dead (no @EnableScheduling) and must NOT be listed as an active scheduled job.",
+    "Routes: only explicit controller mappings + actuator/springdoc wildcard groups; no invented endpoints. Severity consistency; ID continuity."
+  ]
+}

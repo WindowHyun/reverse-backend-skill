@@ -1,0 +1,58 @@
+{
+  "fixture": "fastapi-notes",
+  "notes": "Ground truth for eval/fixtures/fastapi-notes. Framework-specific traps are in 'manual'.",
+  "endpoints": [
+    { "id": "E1",  "method": "POST",   "path": "/token" },
+    { "id": "E2",  "method": "GET",    "path": "/notes" },
+    { "id": "E3",  "method": "GET",    "path": "/notes/{note_id}" },
+    { "id": "E4",  "method": "POST",   "path": "/notes" },
+    { "id": "E5",  "method": "DELETE", "path": "/notes/{note_id}" },
+    { "id": "E6",  "method": "POST",   "path": "/users" },
+    { "id": "E7",  "method": "GET",    "path": "/users/{user_id}" },
+    { "id": "E8",  "method": "POST",   "path": "/admin/purge" },
+    { "id": "E9",  "method": "GET",    "path": "/admin/debug" },
+    { "id": "E10", "method": "DELETE", "path": "/legacy/notes/{note_id}" },
+    { "id": "E11", "method": "GET",    "path": "/healthz" }
+  ],
+  "findings": [
+    { "id": "F1", "severity": "critical", "owasp": "API3/API5", "title": "POST /users accepts is_admin from the client => self-service admin (privilege escalation)",
+      "near": ["is_admin", "(권한 상승|승격|escalation|mass assignment|누구나|API3|API5|admin)", 400] },
+    { "id": "F2", "severity": "critical", "owasp": "API5/API9", "title": "DELETE /legacy/notes/{note_id} has NO guard (the admin guard is commented out)",
+      "near": ["/legacy/notes", "(가드 없|무인증|미적용|주석|unguarded|no guard|인증 없)", 500] },
+    { "id": "F3", "severity": "critical", "owasp": "API8/API9", "title": "GET /admin/debug unguarded, dumps os.environ and DATABASE_URL",
+      "near": ["/admin/debug", "(environ|환경변수|env|시크릿|노출)", 400] },
+    { "id": "F4", "severity": "high", "owasp": "API3", "title": "POST /users and GET /users/{id} return the ORM User directly (no response_model) => password_hash exposed",
+      "near": ["password_hash", "(response_model|노출|exposure|직반환|ORM|API3)", 400] },
+    { "id": "F5", "severity": "high", "owasp": "API1", "title": "GET /notes/{note_id} requires login but has no owner check (BOLA)",
+      "near": ["/notes/\\{note_id\\}", "(BOLA|IDOR|소유자|owner|API1)", 500] },
+    { "id": "F6", "severity": "high", "owasp": "API1", "title": "GET /users/{user_id}: any logged-in user can read any user (BOLA)",
+      "near": ["/users/\\{user_id\\}", "(BOLA|IDOR|소유자|owner|API1|타인|다른 사용자)", 500] },
+    { "id": "F7", "severity": "medium", "owasp": "API8", "title": "SECRET_KEY falls back to hard-coded default \"change-me\"",
+      "near": ["(change-me|기본값|fallback|하드코딩)", "(SECRET_KEY|JWT|토큰|시크릿)", 400] },
+    { "id": "F8", "severity": "high", "owasp": "API8", "title": "tracked .env + hard-coded Google-style key in app/config_local.py (values must not be shown)",
+      "near": ["\\.env", "(git|추적|tracked|시크릿|secret)", 400], "also": ["(AIza|Google)[^\\n]{0,200}config_local|config_local[^\\n]{0,200}(AIza|Google)"] },
+    { "id": "F9", "severity": "medium", "owasp": "API4", "title": "No rate limit on POST /token; GET /notes list unbounded (no pagination)",
+      "near": ["(rate.?limit|레이트|속도 제한|브루트|pagination|페이지네이션|한도)", "(token|login|notes|없|부재)", 400] }
+  ],
+  "facts": [
+    { "id": "T1", "title": "Runnability: import fails without DATABASE_URL (os.environ[...] at import in db.py)",
+      "near": ["DATABASE_URL", "(import|임포트|부팅|KeyError|기동|필수)", 400] },
+    { "id": "T2", "title": "tasks.py is a real Celery worker with a periodic schedule",
+      "near": ["(tasks\\.py|Celery|celery)", "(send_digest|periodic|스케줄|백그라운드|daily)", 400] },
+    { "id": "T3", "title": "app/consumer/ is NOT messaging (pure pricing function) - name alone must not decide",
+      "near": ["consumer", "(pricing|plan_price|메시징 아님|이름|messaging|비메시징|무관)", 400] },
+    { "id": "T4", "title": "Error responses are FastAPI default {detail: ...}, not RFC 9457",
+      "near": ["(RFC ?9457|Problem Details|problem\\+json)", "(미준수|아님|않|비표준|detail|not|non)", 400] },
+    { "id": "T5", "title": "Auth is reachable: /token issues a real JWT (HS256, algorithms pinned)",
+      "near": ["(/token|create_access_token)", "(HS256|JWT|발급|issue)", 400] }
+  ],
+  "leaks": ["EVALFIXTUREFAKE", "AIzaEVAL"],
+  "manual": [
+    "FastAPI trap: response_model=NoteOut on /notes routes is an over-exposure GUARD (hides internal_flag). It must NOT be reported as a defect / leak of internal_flag.",
+    "DELETE /notes/{note_id} checks owner_id == user.id and must NOT be reported as BOLA/unguarded.",
+    "POST /admin/purge uses dependencies=[Depends(require_admin)] and must be counted as GUARDED (admin only).",
+    "Auth must NOT be described as 'unreachable'; algorithms=[ALGORITHM] is pinned so 'JWT alg confusion' must not be reported.",
+    "The commented-out guard in legacy.py must not be counted as an active guard.",
+    "Severity consistency + no invented endpoints/flaws (precision): list anything not backed by the code."
+  ]
+}
