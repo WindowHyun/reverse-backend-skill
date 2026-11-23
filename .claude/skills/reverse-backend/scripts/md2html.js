@@ -162,11 +162,16 @@ blockquote{background:#fff8f0;border:1px solid #f0d9b8;border-left:4px solid #e0
 blockquote p{margin:6px 0;}
 table{border-collapse:collapse;width:100%;margin:14px 0;font-size:13px;}
 th,td{border:1px solid var(--line);padding:7px 10px;text-align:left;vertical-align:top;}
+/* Korean text: wrap at spaces, not between syllables; long code/paths may still break so one wide cell cannot starve its neighbours */
+body{word-break:keep-all;overflow-wrap:anywhere;}
+code{overflow-wrap:anywhere;}
+th,td{min-width:5em;}
+pre,pre code{word-break:normal;overflow-wrap:normal;}
 th{background:var(--th);font-weight:600;} tbody tr:nth-child(even){background:#fafbfc;}
 ul,ol{margin:8px 0 8px 4px;padding-left:22px;} li{margin:3px 0;}
 input[type=checkbox]{margin-right:6px;}
 @page{margin:16mm 14mm;}
-@media print{body{padding:0;max-width:none;}h2{page-break-after:avoid;}table,blockquote,pre{page-break-inside:avoid;}pre{white-space:pre-wrap;}}
+@media print{body{padding:0;max-width:none;}h2,h3,h4{page-break-after:avoid;}blockquote,pre{page-break-inside:avoid;}table{page-break-inside:auto;}tr{page-break-inside:avoid;}thead{display:table-header-group;}pre{white-space:pre-wrap;}}
 `;
 function convert(md, title){
   const body = blocks(md.split("\n"));

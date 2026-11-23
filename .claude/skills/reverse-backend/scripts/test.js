@@ -164,6 +164,16 @@ console.log("md2html — rendering regressions:");
   check("``` inside ~~~ fence does not close it", b.includes("a\n```\nb"));
 }
 
+// 23. Korean-friendly layout CSS (regression: Hangul wrapped per syllable in narrow table columns).
+{
+  const css = convert("x", "t");
+  check("Korean words wrap at spaces (word-break:keep-all)", /word-break:keep-all/.test(css));
+  check("long code/paths may still wrap (overflow-wrap:anywhere)", /overflow-wrap:anywhere/.test(css));
+  check("print: tables may split between rows, not as a whole", /table\{page-break-inside:auto;\}/.test(css) && /tr\{page-break-inside:avoid;\}/.test(css));
+  check("print: table header repeats across pages", /thead\{display:table-header-group;\}/.test(css));
+  check("narrow id cells are not squeezed below ~5em", /th,td\{min-width:5em;\}/.test(css));
+}
+
 console.log("\nrender.js — structural invariants:");
 {
   const src = fs.readFileSync(path.join(__dirname, "render.js"), "utf8");
