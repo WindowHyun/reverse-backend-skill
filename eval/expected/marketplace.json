@@ -334,7 +334,7 @@
       "id": "F2",
       "severity": "critical",
       "owasp": "API6/API2",
-      "title": "POST /api/v1/payments/webhook/legacy: the legacy provider parse() does no signature check, so anyone can mark any order paid (stripe/paypal do verify)",
+      "title": "POST /api/v1/payments/webhook/legacy: the legacy provider parse() does no signature check at all, so anyone can mark any order paid (stripe/paypal do verify a signature, but see F29)",
       "near": [
         "(webhook/:provider|webhook/legacy|legacy provider|providers/legacy|legacy)",
         "(서명|signature|검증|unverified|무인증|인증 없|미검증)",
@@ -426,6 +426,9 @@
         "(price|가격)",
         400
       ],
+      "any": [
+        "[Cc]lient-supplied (cart )?price|cart[^\\n]{0,160}price[^\\n]{0,160}(client|body|클라이언트)"
+      ],
       "also": [
         "(client|클라이언트|body|신뢰|trust)"
       ]
@@ -439,6 +442,9 @@
         "(coupons/apply|/apply)",
         "(single|한 번|1회|중복|stack|재사용|reuse|무제한|unlimited|usedBy|누적|반복)",
         500
+      ],
+      "any": [
+        "coupon[^\\n]{0,250}(one-time|used-once|once|single-use|usedBy|1회|일회)"
       ]
     },
     {
@@ -530,7 +536,7 @@
         400
       ],
       "any": [
-        "SSRF[^\\n]{0,200}webhook-test|webhook-test[^\\n]{0,250}SSRF"
+        "SSRF[^\\n]{0,200}(webhook-test|notifications|callback|user-supplied|any URL)|(webhook-test|notifications/controller)[^\\n]{0,250}SSRF"
       ]
     },
     {
@@ -637,6 +643,28 @@
         "(stack|스택)",
         400
       ]
+    },
+    {
+      "id": "F29",
+      "severity": "high",
+      "owasp": "API2/API6",
+      "title": "stripe/paypal webhook HMAC is keyed with `process.env.X || ''`: because config never loads .env, an unset secret makes the expected signature computable by anyone (forgeable); it also signs JSON.stringify(req.body) (re-serialised, not the raw body) and has no replay protection. Found by a run, not planted on purpose — still a real flaw in the code.",
+      "near": [
+        "(stripe|paypal)",
+        "(''|빈 키|폴백|fallback|forg|위조|re-serial|JSON\\.stringify|replay|재전송)",
+        500
+      ]
+    },
+    {
+      "id": "F30",
+      "severity": "medium",
+      "owasp": "API6",
+      "title": "POST /api/v2/orders: `items` is validated only as an array (Joi.array()), so qty can be zero or negative and shrink/negate the server-computed total. Found by a run, not planted on purpose — still a real flaw in the code.",
+      "near": [
+        "(수량|quantity|qty)",
+        "(검증|validat|negative|음수|unchecked|미검증|범위|bound)",
+        400
+      ]
     }
   ],
   "facts": [
@@ -647,6 +675,9 @@
         "(readdirSync|동적|dynamic|디렉토리|자동)",
         "(modules|mount|마운트)",
         400
+      ],
+      "any": [
+        "(every|each) directory (in|under) `?src/modules|mount rule|디렉토리[^\\n]{0,30}마운트"
       ]
     },
     {
@@ -669,7 +700,7 @@
     },
     {
       "id": "T4",
-      "title": "stripe/paypal webhooks verify an HMAC with timingSafeEqual (correct; must not be reported as unverified)",
+      "title": "stripe/paypal webhooks DO verify an HMAC signature with timingSafeEqual (unlike the legacy provider); weakness notes (empty-key fallback, re-serialised body, no replay protection) are valid extras, but they must not be reported as having no signature check",
       "near": [
         "(stripe|paypal)",
         "(HMAC|timingSafeEqual|서명 검증|signature)",
@@ -749,7 +780,7 @@
     "catalog and categories are public for reads but writes are guarded (seller + owner check / admin): they must NOT be reported as unguarded.",
     "orders v2: list is scoped to req.user.id and create computes the total server-side from catalog prices (priceItems): must NOT be reported as client-trusted price or BOLA. Only PUT /:id/status is the v2 flaw.",
     "users: register forces role='user' and validates input (safe); only PUT /users/:id (no validation) and forgot/GET /:id are flawed.",
-    "payments: stripe/paypal verify signatures (correct); only the legacy provider is unverified.",
+    "payments: stripe and paypal DO verify a signature (HMAC + timingSafeEqual); only the legacy provider has no verification at all. Noting that the stripe/paypal key falls back to '' when the env var is unset (forgeable), that the HMAC covers re-serialised JSON, or that there is no replay protection is a VALID extra finding (F29) — but saying they are 'unverified/unauthenticated' like legacy is wrong.",
     "Most generated modules have owner checks: the report must not claim blanket BOLA; it must pinpoint inventory PUT, sellers payout, legacy orders, and users GET /:id.",
     "The shared 'x-internal-call' bypass (F1) depends on INTERNAL_TOKEN being unset because config never loads .env: the report should explain the undefined===undefined condition or at least flag the spoofable header.",
     "Numbering: with ~140 files / ~75 endpoints, E-/F- ids must be one continuous scheme with no duplicates or gaps and one commit hash (split-analysis merge quality).",
