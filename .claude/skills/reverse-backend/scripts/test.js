@@ -174,6 +174,19 @@ console.log("md2html — rendering regressions:");
   check("narrow id cells are not squeezed below ~5em", /th,td\{min-width:5em;\}/.test(css));
 }
 
+// 24. Review fixes: list type across blank lines, fence length, inline code inside link URLs.
+{
+  const l = body("- a\n\n1. b", "t");
+  check("bullet list then ordered list across a blank line are two lists", l === "<ul><li>a</li></ul>\n<ol><li>b</li></ol>");
+  check("same-type items across a blank line stay one list", body("1. a\n\n2. b", "t") === "<ol><li>a</li><li>b</li></ol>");
+  check("nested list of another type stays nested", body("- a\n  1. x\n- b", "t") === "<ul><li>a<ol><li>x</li></ol></li><li>b</li></ul>");
+  const f = body("~~~~\nx\n~~~\ny\n~~~~", "t");
+  check("shorter fence inside a longer fence does not close it", f === '<pre><code>x\n~~~\ny</code></pre>');
+  const h = body('[x](https://e.com/`"autofocus onfocus="alert(1)`)', "t");
+  check("inline code with a quote inside a link URL cannot reach href", !/<a\b/.test(h) && !/href="[^"]*<code>/.test(h));
+  check("the inline code is still rendered as code", h.includes("<code>"));
+}
+
 console.log("\nrender.js — structural invariants:");
 {
   const src = fs.readFileSync(path.join(__dirname, "render.js"), "utf8");

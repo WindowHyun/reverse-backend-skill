@@ -21,15 +21,18 @@ case "$name" in
     printf 'module.exports = { awsAccessKeyId: "%s", region: "us-east-1" };\n' "$AWS" > "$dest/src/config/legacy.js"
     ;;
   fastapi-notes)
+    mkdir -p "$dest/app"
     printf 'DATABASE_URL=postgresql://app:%s-pw@db/notes\nSECRET_KEY=%s-jwt\n' "$TAG" "$TAG" > "$dest/.env"
     printf 'GOOGLE_MAPS_KEY = "%s"\n' "$GOOG" > "$dest/app/config_local.py"
     ;;
   clinicdesk-django)
+    mkdir -p "$dest/core"
     printf 'DATABASE_URL=postgres://clinic:%s-pw@db:5432/clinic\nDJANGO_SECRET_KEY=%s-django\nPAYMENT_API_KEY=%s\n' "$TAG" "$TAG" "$STRIPE" > "$dest/.env"
     # orphan module: nothing imports it
     printf 'AWS_ACCESS_KEY_ID = "%s"  # backup bucket\n' "$AWS" > "$dest/core/legacy_keys.py"
     ;;
   library-nest)
+    mkdir -p "$dest/src/config"
     printf 'DATABASE_URL=postgres://lib:%s-pw@db:5432/lib\nJWT_SECRET=%s-jwt\nWEBHOOK_SECRET=%s\n' "$TAG" "$TAG" "$STRIPE" > "$dest/.env"
     # orphan config: nothing imports it
     printf "export const awsAccessKeyId = '%s';\n" "$AWS" > "$dest/src/config/aws.ts"
@@ -41,6 +44,7 @@ case "$name" in
     printf 'package com.example.bank.legacy;\n\npublic class AwsConfig {\n    public static final String ACCESS_KEY_ID = "%s";\n}\n' "$AWS" > "$dest/src/main/java/com/example/bank/legacy/AwsConfig.java"
     ;;
   marketplace)
+    mkdir -p "$dest/src/lib"
     printf 'DATABASE_URL=postgres://market:%s-pw@db:5432/market\nJWT_SECRET=%s-jwt\nINTERNAL_TOKEN=%s-internal\nSTRIPE_WEBHOOK_SECRET=%s\n' "$TAG" "$TAG" "$TAG" "$STRIPE" > "$dest/.env"
     # orphan module: nothing requires it
     printf "module.exports = { accessKeyId: '%s', bucket: 'marketplace-backups' };\n" "$AWS" > "$dest/src/lib/s3legacy.js"

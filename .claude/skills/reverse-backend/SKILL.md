@@ -113,21 +113,22 @@ Slack(`xox...`) 같은 키 패턴이 코드에 하드코딩돼 있는지도 확�
 모른 채 소스를 통째로 읽으면(`cat`·`cat -n`·여러 파일 일괄 Read) 값이 그대로 출력된다.
 - **마스킹 열람만 허용되는 파일**: ① 키 패턴 스캔(위)에 걸린 파일(예: `config_local.py`,
   `legacy.js` — 시크릿 후보 목록에 없는 평범한 소스여도 마찬가지), ② **설정·환경 파일**
-  (`.env*`, `application*.yml|yaml|properties`, `config/` 아래 json·yaml·toml·ini·conf), ③ 아래
+  (`.env*`, `application*.yml|yaml|properties`, `config/` 아래 json·yaml·toml·ini·conf, **XML 설정**
+  `applicationContext*.xml`·`settings.xml`·`web.config` 등 — `<password>…</password>`·`name="password" value="…"` 형태 포함), ③ 아래
   "일반 키 이름 스캔"에 걸린 파일. 이 파일들은 Read/`cat`/`cat -n`/`head`/일괄 읽기에서 **제외**하고,
   구조가 필요하면 값을 가린 채로만 본다(벤더 키 패턴 + `password·secret·token·api-key·credential`
-  이름의 키 값 + `user:pass@host`의 비밀번호를 가린다):
-  `sed -E 's/AKIA[0-9A-Z]{16}/<AWS-KEY>/g; s/AIza[0-9A-Za-z_-]{35}/<GOOGLE-KEY>/g; s/sk_live_[0-9A-Za-z]+/<STRIPE-KEY>/g; s/ghp_[0-9A-Za-z]{36}/<GITHUB-TOKEN>/g; s/xox[baprs]-[0-9A-Za-z-]+/<SLACK-TOKEN>/g; s#(://[^:/@ ]+:)[^@ ]+@#\1<MASKED>@#g; s/((pass(word|wd)?|secret|token|api[-_]?key|private[-_]?key|credential)[A-Za-z0-9_.-]*[[:space:]]*[:=][[:space:]]*).+/\1<MASKED>/I' <파일>`
+  이름의 키 값(따옴표 친 JSON 키·XML 요소·`name=…value=…` 속성 포함) + `user:pass@host`의 비밀번호를 가린다):
+  `sed -E 's/AKIA[0-9A-Z]{16}/<AWS-KEY>/g; s/AIza[0-9A-Za-z_-]{35}/<GOOGLE-KEY>/g; s/sk_live_[0-9A-Za-z]+/<STRIPE-KEY>/g; s/ghp_[0-9A-Za-z]{36}/<GITHUB-TOKEN>/g; s/xox[baprs]-[0-9A-Za-z-]+/<SLACK-TOKEN>/g; s#(://[^:/@ ]+:)[^@ ]+@#\1<MASKED>@#g; s#(<[A-Za-z0-9_.:-]*(pass(word|wd)?|secret|token|api[-_]?key|private[-_]?key|credential)[A-Za-z0-9_.:-]*>)[^<]+#\1<MASKED>#Ig; s/(["'"'"'][A-Za-z0-9_.-]*(pass(word|wd)?|secret|token|api[-_]?key|private[-_]?key|credential)[A-Za-z0-9_.-]*["'"'"'][[:space:]]*[:=][[:space:]]*)(["'"'"'])[^"'"'"']*(["'"'"'])/\1\4<MASKED>\5/Ig; s/((pass(word|wd)?|secret|token|api[-_]?key|private[-_]?key|credential)[A-Za-z0-9_.-]*[[:space:]]*[:=][[:space:]]*).+/\1<MASKED>/I; s/((pass(word|wd)?|secret|token|api[-_]?key|private[-_]?key|credential)[A-Za-z0-9_.-]*=)"[^"]*"/\1"<MASKED>"/Ig; s#((name|key)="[^"]*(pass(word|wd)?|secret|token|api[-_]?key|private[-_]?key|credential)[^"]*"[^>]*value=")[^"]*"#\1<MASKED>"#Ig' <파일>`
   벤더 패턴만 가리는 `sed`로는 평문 `password:`·`secret:` 값이 그대로 출력되므로 위 전체 식을 쓴다.
 - **일반 키 이름 스캔**(벤더 패턴이 없는 평문 비밀번호·서명키 탐지, 위치만 출력):
-  `grep -rnEi '(pass(word|wd)?|secret|token|api[-_]?key|private[-_]?key|credential)[A-Za-z0-9_.-]*[[:space:]]*[:=][[:space:]]*["'"'"']?[A-Za-z0-9/+_.@-]{6,}' --exclude-dir=.git --exclude-dir=node_modules . | cut -d: -f1,2`
+  `grep -rnEi '(pass(word|wd)?|secret|token|api[-_]?key|private[-_]?key|credential)[A-Za-z0-9_.-]*["'"'"']?[[:space:]]*[:=][[:space:]]*["'"'"']?[A-Za-z0-9/+_.@-]{6,}|<[A-Za-z0-9_.:-]*(pass(word|wd)?|secret|token|api[-_]?key|private[-_]?key|credential)[A-Za-z0-9_.:-]*>[^<]{6,}<' --exclude-dir=.git --exclude-dir=node_modules . | cut -d: -f1,2`
   → `파일:라인`만 나온다. 오탐(`password: string` 같은 타입 선언)이 섞여도 괜찮다 — 이 파일들을 마스킹으로
   열 뿐이다.
 - **폴백(기본값) 존재 여부는 값 없이 구조로 확인**: 마스킹하면 `os.environ.get("X", "기본값")`의 기본값
   유무가 가려진다. 필요하면 아래 탐침으로 본다 — 파일 내용을 `grep`으로 꺼낸 뒤 `sed`로 거르지 말고
   **`sed -n`이 직접 파일을 읽어** 리터럴을 치환한다(따옴표 값·`${X:기본값}`·따옴표 없는 YAML/properties/.env
   값을 모두 `<LIT>`/`<DEFAULT>`로 바꾸고, `||`·`??`·`process.env`가 있는 줄은 구조를 보존한다):
-  `sed -nE '/<키 이름>/I{s/(["'"'"'])[^"'"'"']*\1/\1<LIT>\1/g; s/(\$\{[A-Za-z0-9_]+:)[^}]*\}/\1<DEFAULT>}/g; /^[^()]*$/{/\|\||\?\?|process\.env/!s/([:=][[:space:]]*)[^$"'"'"'<[:space:]].*/\1<LIT>/}; p}' <파일>`
+  `sed -nE '/<키 이름>/I{s/(["'"'"'])[^"'"'"']*\1/\1<LIT>\1/g; s/(\$\{[A-Za-z0-9_]+:)[^}]*\}/\1<DEFAULT>}/g; /\|\||\?\?|process\.env|environ|getenv/!s/([:=][[:space:]]*)[^$"'"'"'<[:space:]].*/\1<LIT>/; /\$\{/!s#(<[A-Za-z0-9_.:-]+>)[^<]+(</)#\1<LIT>\2#g; p}' <파일>`
   → `os.environ.get("<LIT>", "<LIT>")`, `${JWT_SECRET:<DEFAULT>}`, `secretOrKey: process.env.JWT_SECRET || '<LIT>'`
   처럼 기본값이 있다는 사실만 보이고 값은 나오지 않는다. 기본값이 있으면 5.1/API8에 "하드코딩 폴백
   존재(값 미기재)"로 적는다. **이 탐침 외의 방법(`grep -n … | sed`, `awk` 즉석 스크립트 등)으로 설정 값을

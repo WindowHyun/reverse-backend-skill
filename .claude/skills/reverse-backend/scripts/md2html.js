@@ -1,13 +1,13 @@
 // Minimal, dependency-free Markdown -> self-contained HTML converter.
 // Scope: the subset this skill's generated reports use, NOT full CommonMark.
 // Supports: headings, hr, ``` / ~~~ fenced code, GFM tables (pipes in `code`/escaped \| ok),
-// nested blockquotes, bullet/numbered/checkbox lists (indent-nested, lazy continuation lines),
+// nested blockquotes, bullet/numbered/checkbox lists (indent-nested, lazy continuation lines; a different
+// marker type at the same indent starts a new list),
 // **bold**, *italic*, ~~strike~~, `code`, [text](url), ![alt](url) (rendered as a link, never
 // fetched), bare URLs.
 // Known limitations (by design — reports rarely hit these): single-backtick code spans only,
 // **bold** cannot contain a literal '*', tables need outer pipes, no `_italic_`/`__bold__`
-// (underscores are too common in identifiers like `__init__`/`user_id`), list ordered/
-// unordered decided by each list's first line. Full CommonMark would require vendoring a real
+// (underscores are too common in identifiers like `__init__`/`user_id`). Full CommonMark would require vendoring a real
 // parser, which the no-dependencies constraint forbids.
 // Usable as a module: require(...).convert(mdString, title) -> htmlString
 // Or as CLI: node md2html.js <in.md> <out.html> "<title>"
@@ -44,7 +44,7 @@ function inline(s){
   // Images become plain links: a generated report must never make the reader's browser (or the
   // PDF renderer) fetch a remote URL (tracking/exfil via query string).
   s = s.replace(/!\[([^\]]*)\]\((https?:[^)"\s]+)\)/g, (_,t,u)=>`<a href="${attrEsc(u)}">${t||u}</a>`);
-  s = s.replace(/\[([^\]]+)\]\((https?:[^)"]+)\)/g, (_,t,u)=>`<a href="${attrEsc(u)}">${t}</a>`);
+  s = s.replace(/\[([^\]]+)\]\((https?:[^)"\x00]+)\)/g, (_,t,u)=>`<a href="${attrEsc(u)}">${t}</a>`);
   // Autolink bare URLs, but not ones already inside a tag we just emitted.
   // After esc() the only real '>' / '=' come from those tags (esc() leaves '"' alone — see
   // attrEsc), so excluding them in the lookbehind prevents double-wrapping (e.g. link text
@@ -78,18 +78,19 @@ function tableHTML(rows){
 const LI=/^[ \t]*([-*]|\d+\.)[ \t]+/;
 const BLOCK_START=/^\s*(#{1,6}\s|(`{3,}|~{3,})|>|\||---+\s*$)/;
 const liIndent=l=>l.match(/^[ \t]*/)[0].replace(/\t/g,"    ").length;
+const isOrdered=l=>/^\s*\d+\./.test(l);
 // Render one list starting at lines[i] whose items sit at `indent`. Deeper-indented list lines
 // nest inside the preceding item; non-list lines right after an item are lazy continuations of
 // it; a blank line only ends the list if no further list line follows. Returns [html, nextIndex].
 function listHTML(lines,i,indent){
-  const ordered=/^\s*\d+\./.test(lines[i]); const items=[];
+  const ordered=isOrdered(lines[i]); const items=[];
   while(i<lines.length){
     if(/^\s*$/.test(lines[i])){
       let j=i; while(j<lines.length&&/^\s*$/.test(lines[j])) j++;
-      if(j<lines.length&&LI.test(lines[j])&&liIndent(lines[j])>=indent){ i=j; continue; }
+      if(j<lines.length&&LI.test(lines[j])&&(liIndent(lines[j])>indent||(liIndent(lines[j])===indent&&isOrdered(lines[j])===ordered))){ i=j; continue; }
       break;
     }
-    if(!LI.test(lines[i])||liIndent(lines[i])!==indent) break;
+    if(!LI.test(lines[i])||liIndent(lines[i])!==indent||isOrdered(lines[i])!==ordered) break;
     let it=lines[i].replace(LI,""); i++;
     while(i<lines.length&&!/^\s*$/.test(lines[i])&&!LI.test(lines[i])&&!BLOCK_START.test(lines[i])){ it+=" "+lines[i].trim(); i++; }
     // Extract a task-list checkbox and emit its HTML OUTSIDE inline(), so esc() does not
@@ -118,7 +119,7 @@ function blocks(lines){
     let fm;
     if((fm=line.match(/^(`{3,}|~{3,})\s*([\w+-]*)\s*$/))){
       const lang=fm[2]; const buf=[]; i++;
-      const closeRe=new RegExp("^"+(fm[1][0]==="`"?"`":"~")+"{3,}\\s*$");
+      const closeRe=new RegExp("^"+(fm[1][0]==="`"?"`":"~")+"{"+fm[1].length+",}\\s*$");
       while(i<lines.length && !closeRe.test(lines[i])){buf.push(lines[i]);i++;}
       if(i<lines.length) i++; // consume closing fence
       const cls = lang ? ` class="lang-${lang}"` : "";
