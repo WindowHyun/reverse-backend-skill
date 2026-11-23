@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Usage: eval/setup.sh <express-shop|fastapi-notes|clinicdesk-django|library-nest|bank-spring> <dest-dir>
+# Usage: eval/setup.sh <express-shop|fastapi-notes|clinicdesk-django|library-nest|bank-spring|marketplace> <dest-dir>
 # Copies a fixture to <dest-dir>, plants FAKE secrets (assembled at run time so no key-shaped
 # string is ever committed to this repo), and makes it a git repo with the secrets tracked.
 set -euo pipefail
@@ -39,6 +39,11 @@ case "$name" in
     printf 'spring:\n  datasource:\n    password: %s-pw\njwt:\n  secret: %s-jwt\npayment:\n  api-key: %s\n' "$TAG" "$TAG" "$STRIPE" > "$dest/src/main/resources/application-prod.yml"
     # orphan config class: nothing references it
     printf 'package com.example.bank.legacy;\n\npublic class AwsConfig {\n    public static final String ACCESS_KEY_ID = "%s";\n}\n' "$AWS" > "$dest/src/main/java/com/example/bank/legacy/AwsConfig.java"
+    ;;
+  marketplace)
+    printf 'DATABASE_URL=postgres://market:%s-pw@db:5432/market\nJWT_SECRET=%s-jwt\nINTERNAL_TOKEN=%s-internal\nSTRIPE_WEBHOOK_SECRET=%s\n' "$TAG" "$TAG" "$TAG" "$STRIPE" > "$dest/.env"
+    # orphan module: nothing requires it
+    printf "module.exports = { accessKeyId: '%s', bucket: 'marketplace-backups' };\n" "$AWS" > "$dest/src/lib/s3legacy.js"
     ;;
 esac
 
