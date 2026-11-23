@@ -109,6 +109,83 @@ console.log("md2html — rendering regressions:");
   const full = convert("`code1` mid `code2`", "t");
   check("no NUL placeholder leak", !full.includes("\x00"));
 }
+// 17. A literal '"' in a URL cannot break out of the href attribute (HTML/attr injection).
+{
+  const b1 = body('[클릭](https://evil.com/"autofocus onfocus="alert(1))', "t");
+  check("md-link quote does not break out of href", !/onfocus=/.test(b1) || !b1.includes('" autofocus'));
+  check("md-link with quoted url does not open an <a> tag", !b1.includes("<a "));
+  const b2 = body('see https://evil.com/"onmouseover="alert(1) end', "t");
+  check("autolink stops before the quote", b2.includes('<a href="https://evil.com/">'));
+  check("autolink does not inject onmouseover into the tag", !/<a\b[^>]*onmouseover/.test(b2));
+  check("trailing quoted text stays literal, not re-parsed as markup", b2.includes('</a>"onmouseover="alert(1) end'));
+}
+
+// 18. Nested lists keep hierarchy (bullets inside bullets, bullets inside a numbered item).
+{
+  const b = body("- A\n  - A1\n  - A2\n    - A2a\n- B", "t");
+  check("nested bullets -> nested <ul>", b === "<ul><li>A<ul><li>A1</li><li>A2<ul><li>A2a</li></ul></li></ul></li><li>B</li></ul>");
+  const o = body("1. one\n2. two\n   - sub\n3. three", "t");
+  check("bullet under numbered item stays nested (ol keeps 3 items)", o === "<ol><li>one</li><li>two<ul><li>sub</li></ul></li><li>three</li></ol>");
+  check("tab-indented nesting", body("- a\n\t- b", "t") === "<ul><li>a<ul><li>b</li></ul></li></ul>");
+  const c = body("- [x] done\n  - [ ] sub", "t");
+  check("nested checkboxes render as inputs", count(c, /<input type="checkbox"/g) === 2 && c.includes("checked disabled> done"));
+}
+// 19. Lazy continuation: a wrapped list item stays one <li>; a blank-line gap keeps one list.
+{
+  const b = body("- long item\n  continues here\n- next\n\npara", "t");
+  check("continuation line joins its item", b.includes("<li>long item continues here</li>") && b.includes("<li>next</li>"));
+  check("paragraph after blank line is not swallowed", b.includes("<p>para</p>"));
+  check("blank-separated numbered items stay one <ol>", body("1. a\n\n2. b\n\n3. c", "t") === "<ol><li>a</li><li>b</li><li>c</li></ol>");
+  const t = body("- a\n| h |\n|---|\n| c |", "t");
+  check("table right after a list is not swallowed as continuation", t.includes("<table>") && t.includes("<li>a</li>"));
+}
+// 20. *italic* / ~~strike~~ render; globs and wildcards in prose are left alone.
+{
+  const b = body("*Express* ~~old~~ *기울임*은", "t");
+  check("*italic* -> <em> (incl. Korean particle after)", b.includes("<em>Express</em>") && b.includes("<em>기울임</em>은"));
+  check("~~strike~~ -> <del>", b.includes("<del>old</del>"));
+  const g = body("see src/*/x/*.js and /api/* or a * b * c", "t");
+  check("globs/wildcards are not italicized", !g.includes("<em>"));
+  check("** bold still wins over italic", body("**bold** and *it*", "t").includes("<strong>bold</strong> and <em>it</em>"));
+  check("inline code keeps * and ~~ literal", body("`*a*` `~~b~~`", "t").includes("<code>*a*</code> <code>~~b~~</code>"));
+}
+// 21. Images never become <img> (no remote fetch); they degrade to a link. Quotes can't escape.
+{
+  const b = body('![diagram](https://ex.com/a.png) ![](https://ex.com/b.png) ![a"b](https://ex.com/c.png)', "t");
+  check("image -> link with alt text, no <img>", !b.includes("<img") && b.includes('<a href="https://ex.com/a.png">diagram</a>'));
+  check("empty alt falls back to url text", b.includes('<a href="https://ex.com/b.png">https://ex.com/b.png</a>'));
+  check("no stray '!' before converted image", !b.includes("!<a"));
+  check("quote in alt cannot inject attributes", !/<a\b[^>]*\balt=|<a\b[^>]*"\s*on\w+=/.test(b));
+}
+// 22. ~~~ fences render as code, and a ~~~ fence is not closed by ```.
+{
+  const b = body("~~~python\nprint(1)\n~~~\n\n~~~\na\n```\nb\n~~~", "t");
+  check("~~~ fence -> <pre><code lang>", b.includes('<pre><code class="lang-python">print(1)</code></pre>'));
+  check("``` inside ~~~ fence does not close it", b.includes("a\n```\nb"));
+}
+
+// 23. Korean-friendly layout CSS (regression: Hangul wrapped per syllable in narrow table columns).
+{
+  const css = convert("x", "t");
+  check("Korean words wrap at spaces (word-break:keep-all)", /word-break:keep-all/.test(css));
+  check("long code/paths may still wrap (overflow-wrap:anywhere)", /overflow-wrap:anywhere/.test(css));
+  check("print: tables may split between rows, not as a whole", /table\{page-break-inside:auto;\}/.test(css) && /tr\{page-break-inside:avoid;\}/.test(css));
+  check("print: table header repeats across pages", /thead\{display:table-header-group;\}/.test(css));
+  check("narrow id cells are not squeezed below ~5em", /th,td\{min-width:5em;\}/.test(css));
+}
+
+// 24. Review fixes: list type across blank lines, fence length, inline code inside link URLs.
+{
+  const l = body("- a\n\n1. b", "t");
+  check("bullet list then ordered list across a blank line are two lists", l === "<ul><li>a</li></ul>\n<ol><li>b</li></ol>");
+  check("same-type items across a blank line stay one list", body("1. a\n\n2. b", "t") === "<ol><li>a</li><li>b</li></ol>");
+  check("nested list of another type stays nested", body("- a\n  1. x\n- b", "t") === "<ul><li>a<ol><li>x</li></ol></li><li>b</li></ul>");
+  const f = body("~~~~\nx\n~~~\ny\n~~~~", "t");
+  check("shorter fence inside a longer fence does not close it", f === '<pre><code>x\n~~~\ny</code></pre>');
+  const h = body('[x](https://e.com/`"autofocus onfocus="alert(1)`)', "t");
+  check("inline code with a quote inside a link URL cannot reach href", !/<a\b/.test(h) && !/href="[^"]*<code>/.test(h));
+  check("the inline code is still rendered as code", h.includes("<code>"));
+}
 
 console.log("\nrender.js — structural invariants:");
 {

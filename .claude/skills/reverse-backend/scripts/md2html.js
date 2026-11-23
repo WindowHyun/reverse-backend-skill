@@ -1,17 +1,24 @@
 // Minimal, dependency-free Markdown -> self-contained HTML converter.
 // Scope: the subset this skill's generated reports use, NOT full CommonMark.
-// Supports: headings, hr, ``` fenced code, GFM tables (pipes in `code`/escaped \| ok),
-// nested blockquotes, bullet/numbered/checkbox lists, **bold**, `code`, [text](url), bare URLs.
-// Known limitations (by design — reports rarely hit these): no nested list indentation
-// (flattened), single-backtick code spans only, ``` fences only (no 4+/~~~), **bold** cannot
-// contain a literal '*', list ordered/unordered decided by its first line. Full CommonMark
-// would require vendoring a real parser, which the no-dependencies constraint forbids.
+// Supports: headings, hr, ``` / ~~~ fenced code, GFM tables (pipes in `code`/escaped \| ok),
+// nested blockquotes, bullet/numbered/checkbox lists (indent-nested, lazy continuation lines; a different
+// marker type at the same indent starts a new list),
+// **bold**, *italic*, ~~strike~~, `code`, [text](url), ![alt](url) (rendered as a link, never
+// fetched), bare URLs.
+// Known limitations (by design — reports rarely hit these): single-backtick code spans only,
+// **bold** cannot contain a literal '*', tables need outer pipes, no `_italic_`/`__bold__`
+// (underscores are too common in identifiers like `__init__`/`user_id`). Full CommonMark would require vendoring a real
+// parser, which the no-dependencies constraint forbids.
 // Usable as a module: require(...).convert(mdString, title) -> htmlString
 // Or as CLI: node md2html.js <in.md> <out.html> "<title>"
 "use strict";
 const fs = require("fs");
 
 function esc(s){return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");}
+// esc() deliberately leaves '"' alone (it's not markup outside an attribute), so any href
+// value built from esc()'d text must go through this before landing inside href="...", or a
+// literal '"' in the source breaks out of the attribute (e.g. `[x](https://e/"onfocus=alert(1))`).
+function attrEsc(s){return s.replace(/"/g,"&quot;");}
 // Trim trailing sentence punctuation and unbalanced ')' off an autolinked URL,
 // returning [href, trailingText]. Keeps balanced parens (e.g. Wikipedia URLs).
 function trimUrl(url){
@@ -30,14 +37,23 @@ function inline(s){
   const codes = [];
   s = s.replace(/`([^`]+)`/g, (_,c)=>{ codes.push(c); return `\x00${codes.length-1}\x00`; });
   s = s.replace(/\*\*([^*]+)\*\*/g, (_,c)=>`<strong>${c}</strong>`);
-  s = s.replace(/\[([^\]]+)\]\((https?:[^)]+)\)/g, (_,t,u)=>`<a href="${u}">${t}</a>`);
+  // *italic*: opener must follow start/space/open-bracket/quote and hug its text, so globs and
+  // wildcards in prose (`/api/*`, `src/*/x`, `a * b`) are left alone.
+  s = s.replace(/(?<![^\s(\["'])\*([^*\s](?:[^*]*[^*\s])?)\*/g, (_,c)=>`<em>${c}</em>`);
+  s = s.replace(/~~([^~]+)~~/g, (_,c)=>`<del>${c}</del>`);
+  // Images become plain links: a generated report must never make the reader's browser (or the
+  // PDF renderer) fetch a remote URL (tracking/exfil via query string).
+  s = s.replace(/!\[([^\]]*)\]\((https?:[^)"\s]+)\)/g, (_,t,u)=>`<a href="${attrEsc(u)}">${t||u}</a>`);
+  s = s.replace(/\[([^\]]+)\]\((https?:[^)"\x00]+)\)/g, (_,t,u)=>`<a href="${attrEsc(u)}">${t}</a>`);
   // Autolink bare URLs, but not ones already inside a tag we just emitted.
-  // After esc() the only real '>' / '"' / '=' come from those tags, so excluding
-  // them in the lookbehind prevents double-wrapping (e.g. link text that is a URL).
+  // After esc() the only real '>' / '=' come from those tags (esc() leaves '"' alone — see
+  // attrEsc), so excluding them in the lookbehind prevents double-wrapping (e.g. link text
+  // that is a URL). '"' is excluded from the URL charclass below so a quote in the source
+  // (e.g. a quoted URL in prose) ends the autolink instead of being swallowed into href.
   // \x00 excluded so a URL stops at a code placeholder boundary (URL directly followed by `code`).
-  s = s.replace(/(?<!["=(>])\bhttps?:\/\/[^\s<\x00]+/g, (m)=>{
+  s = s.replace(/(?<!["=(>])\bhttps?:\/\/[^\s<>"\x00]+/g, (m)=>{
     const [url, trail] = trimUrl(m);
-    return `<a href="${url}">${url}</a>${trail}`;
+    return `<a href="${attrEsc(url)}">${url}</a>${trail}`;
   });
   s = s.replace(/\x00(\d+)\x00/g, (_,i)=>`<code>${codes[+i]}</code>`);
   return s;
@@ -59,6 +75,41 @@ function tableHTML(rows){
   body.forEach(r=>{t+="<tr>";r.forEach(c=>t+=`<td>${inline(c)}</td>`);t+="</tr>";});
   return t+"</tbody></table>";
 }
+const LI=/^[ \t]*([-*]|\d+\.)[ \t]+/;
+const BLOCK_START=/^\s*(#{1,6}\s|(`{3,}|~{3,})|>|\||---+\s*$)/;
+const liIndent=l=>l.match(/^[ \t]*/)[0].replace(/\t/g,"    ").length;
+const isOrdered=l=>/^\s*\d+\./.test(l);
+// Render one list starting at lines[i] whose items sit at `indent`. Deeper-indented list lines
+// nest inside the preceding item; non-list lines right after an item are lazy continuations of
+// it; a blank line only ends the list if no further list line follows. Returns [html, nextIndex].
+function listHTML(lines,i,indent){
+  const ordered=isOrdered(lines[i]); const items=[];
+  while(i<lines.length){
+    if(/^\s*$/.test(lines[i])){
+      let j=i; while(j<lines.length&&/^\s*$/.test(lines[j])) j++;
+      if(j<lines.length&&LI.test(lines[j])&&(liIndent(lines[j])>indent||(liIndent(lines[j])===indent&&isOrdered(lines[j])===ordered))){ i=j; continue; }
+      break;
+    }
+    if(!LI.test(lines[i])||liIndent(lines[i])!==indent||isOrdered(lines[i])!==ordered) break;
+    let it=lines[i].replace(LI,""); i++;
+    while(i<lines.length&&!/^\s*$/.test(lines[i])&&!LI.test(lines[i])&&!BLOCK_START.test(lines[i])){ it+=" "+lines[i].trim(); i++; }
+    // Extract a task-list checkbox and emit its HTML OUTSIDE inline(), so esc() does not
+    // turn it into literal &lt;input&gt; text.
+    let box=""; const cb=it.match(/^\[( |x|X)\]\s+/);
+    if(cb){ box=`<input type="checkbox"${cb[1].toLowerCase()==="x"?" checked":""} disabled> `; it=it.slice(cb[0].length); }
+    let nested="";
+    for(let j=i; j<lines.length;){
+      if(/^\s*$/.test(lines[j])){ j++; continue; }
+      if(LI.test(lines[j])&&liIndent(lines[j])>indent){
+        const [h,n]=listHTML(lines,j,liIndent(lines[j])); nested+=h; i=n; j=n; continue;
+      }
+      break;
+    }
+    items.push(`<li>${box}${inline(it)}${nested}</li>`);
+  }
+  const tag=ordered?"ol":"ul";
+  return [`<${tag}>${items.join("")}</${tag}>`, i];
+}
 function blocks(lines){
   const out=[]; let i=0;
   while(i<lines.length){
@@ -66,9 +117,10 @@ function blocks(lines){
     if(/^\s*$/.test(line)){i++;continue;}
     // fenced code block: ```lang ... ``` — emit verbatim, no inline processing
     let fm;
-    if((fm=line.match(/^```+\s*([\w+-]*)\s*$/))){
-      const lang=fm[1]; const buf=[]; i++;
-      while(i<lines.length && !/^```+\s*$/.test(lines[i])){buf.push(lines[i]);i++;}
+    if((fm=line.match(/^(`{3,}|~{3,})\s*([\w+-]*)\s*$/))){
+      const lang=fm[2]; const buf=[]; i++;
+      const closeRe=new RegExp("^"+(fm[1][0]==="`"?"`":"~")+"{"+fm[1].length+",}\\s*$");
+      while(i<lines.length && !closeRe.test(lines[i])){buf.push(lines[i]);i++;}
       if(i<lines.length) i++; // consume closing fence
       const cls = lang ? ` class="lang-${lang}"` : "";
       out.push(`<pre><code${cls}>${esc(buf.join("\n"))}</code></pre>`);
@@ -85,20 +137,12 @@ function blocks(lines){
       const buf=[];while(i<lines.length&&/^>\s?/.test(lines[i])){buf.push(lines[i].replace(/^>\s?/,""));i++;}
       out.push(`<blockquote>${blocks(buf)}</blockquote>`);continue;
     }
-    if(/^\s*[-*]\s+/.test(line)||/^\s*\d+\.\s+/.test(line)){
-      const ordered=/^\s*\d+\.\s+/.test(line);const items=[];
-      while(i<lines.length&&(/^\s*[-*]\s+/.test(lines[i])||/^\s*\d+\.\s+/.test(lines[i]))){
-        let it=lines[i].replace(/^\s*([-*]|\d+\.)\s+/,"");
-        // Extract a task-list checkbox and emit its HTML OUTSIDE inline(), so esc() does not
-        // turn it into literal &lt;input&gt; text.
-        let box=""; const cb=it.match(/^\[( |x|X)\]\s+/);
-        if(cb){ box=`<input type="checkbox"${cb[1].toLowerCase()==="x"?" checked":""} disabled> `; it=it.slice(cb[0].length); }
-        items.push(`<li>${box}${inline(it)}</li>`);i++;
-      }
-      out.push(`<${ordered?"ol":"ul"}>${items.join("")}</${ordered?"ol":"ul"}>`);continue;
+    if(LI.test(line)){
+      const [html,next]=listHTML(lines,i,liIndent(line));
+      out.push(html); i=next; continue;
     }
     const buf=[line];i++;
-    while(i<lines.length&&!/^\s*$/.test(lines[i])&&!/^[#>|-]/.test(lines[i])&&!/^```+/.test(lines[i])&&!/^\s*[-*]\s/.test(lines[i])&&!/^\s*\d+\.\s/.test(lines[i])){buf.push(lines[i]);i++;}
+    while(i<lines.length&&!/^\s*$/.test(lines[i])&&!/^[#>|-]/.test(lines[i])&&!/^(```|~~~)/.test(lines[i])&&!LI.test(lines[i])){buf.push(lines[i]);i++;}
     out.push(`<p>${inline(buf.join(" "))}</p>`);
   }
   return out.join("\n");
@@ -119,11 +163,16 @@ blockquote{background:#fff8f0;border:1px solid #f0d9b8;border-left:4px solid #e0
 blockquote p{margin:6px 0;}
 table{border-collapse:collapse;width:100%;margin:14px 0;font-size:13px;}
 th,td{border:1px solid var(--line);padding:7px 10px;text-align:left;vertical-align:top;}
+/* Korean text: wrap at spaces, not between syllables; long code/paths may still break so one wide cell cannot starve its neighbours */
+body{word-break:keep-all;overflow-wrap:anywhere;}
+code{overflow-wrap:anywhere;}
+th,td{min-width:5em;}
+pre,pre code{word-break:normal;overflow-wrap:normal;}
 th{background:var(--th);font-weight:600;} tbody tr:nth-child(even){background:#fafbfc;}
 ul,ol{margin:8px 0 8px 4px;padding-left:22px;} li{margin:3px 0;}
 input[type=checkbox]{margin-right:6px;}
 @page{margin:16mm 14mm;}
-@media print{body{padding:0;max-width:none;}h2{page-break-after:avoid;}table,blockquote,pre{page-break-inside:avoid;}pre{white-space:pre-wrap;}}
+@media print{body{padding:0;max-width:none;}h2,h3,h4{page-break-after:avoid;}blockquote,pre{page-break-inside:avoid;}table{page-break-inside:auto;}tr{page-break-inside:avoid;}thead{display:table-header-group;}pre{white-space:pre-wrap;}}
 `;
 function convert(md, title){
   const body = blocks(md.split("\n"));

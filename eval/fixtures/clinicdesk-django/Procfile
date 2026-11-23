@@ -1,0 +1,2 @@
+web: gunicorn clinicdesk.asgi:application -k uvicorn.workers.UvicornWorker
+worker: celery -A clinicdesk worker -B -l info

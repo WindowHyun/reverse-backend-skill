@@ -1,0 +1,434 @@
+{
+  "fixture": "library-nest",
+  "notes": "NestJS 10: global prefix 'api' + URI versioning (default v1; books/:id is @Version('2') => /api/v2/books/:id and there is NO v1 books/:id); /health is excluded from the prefix; /docs is Swagger. 42 .ts files.",
+  "endpoints": [
+    {
+      "id": "E1",
+      "method": "POST",
+      "path": "/api/v1/auth/login"
+    },
+    {
+      "id": "E2",
+      "method": "POST",
+      "path": "/api/v1/auth/register"
+    },
+    {
+      "id": "E3",
+      "method": "GET",
+      "path": "/api/v1/users/me"
+    },
+    {
+      "id": "E4",
+      "method": "GET",
+      "path": "/api/v1/users/search"
+    },
+    {
+      "id": "E5",
+      "method": "GET",
+      "path": "/api/v1/users/:id"
+    },
+    {
+      "id": "E6",
+      "method": "PATCH",
+      "path": "/api/v1/users/:id"
+    },
+    {
+      "id": "E7",
+      "method": "GET",
+      "path": "/api/v1/books"
+    },
+    {
+      "id": "E8",
+      "method": "GET",
+      "path": "/api/v2/books/:id"
+    },
+    {
+      "id": "E9",
+      "method": "POST",
+      "path": "/api/v1/books"
+    },
+    {
+      "id": "E10",
+      "method": "POST",
+      "path": "/api/v1/books/:id/cover"
+    },
+    {
+      "id": "E11",
+      "method": "GET",
+      "path": "/api/v1/catalog"
+    },
+    {
+      "id": "E12",
+      "method": "GET",
+      "path": "/api/v1/catalog/preview"
+    },
+    {
+      "id": "E13",
+      "method": "POST",
+      "path": "/api/v1/catalog/import"
+    },
+    {
+      "id": "E14",
+      "method": "POST",
+      "path": "/api/v1/loans"
+    },
+    {
+      "id": "E15",
+      "method": "GET",
+      "path": "/api/v1/loans/mine"
+    },
+    {
+      "id": "E16",
+      "method": "POST",
+      "path": "/api/v1/payments/webhook"
+    },
+    {
+      "id": "E17",
+      "method": "GET",
+      "path": "/api/v1/reports/overdue"
+    },
+    {
+      "id": "E18",
+      "method": "GET",
+      "path": "/api/v1/admin/users"
+    },
+    {
+      "id": "E19",
+      "method": "DELETE",
+      "path": "/api/v1/admin/users/:id"
+    },
+    {
+      "id": "E20",
+      "method": "GET",
+      "path": "/api/v1/admin/debug/config"
+    },
+    {
+      "id": "E21",
+      "method": "GET",
+      "path": "/health"
+    },
+    {
+      "id": "E22",
+      "method": "GET",
+      "path": "/docs"
+    }
+  ],
+  "findings": [
+    {
+      "id": "F1",
+      "severity": "critical",
+      "owasp": "API5",
+      "title": "POST /catalog/import is an unauthenticated write: class-level @Public on CatalogController applies to every handler",
+      "near": [
+        "(catalog/import|bulkImport)",
+        "(@Public|무인증|unauth|인증 없|public|공개)",
+        500
+      ]
+    },
+    {
+      "id": "F2",
+      "severity": "high",
+      "owasp": "API7",
+      "title": "GET /catalog/preview fetches a client-supplied URL with axios and is public (unauthenticated SSRF)",
+      "near": [
+        "(catalog/preview|preview)",
+        "(SSRF|API7)",
+        500
+      ],
+      "any": [
+        "SSRF[^\\n]{0,200}(preview|catalog|axios)|(preview|catalog/preview)[^\\n]{0,250}SSRF"
+      ]
+    },
+    {
+      "id": "F3",
+      "severity": "critical",
+      "owasp": "API3/API5",
+      "title": "register spreads the DTO into the entity and the global ValidationPipe has no whitelist => attacker-supplied role (self-service admin)",
+      "near": [
+        "register",
+        "(role|mass assignment|권한)",
+        500
+      ],
+      "also": [
+        "(whitelist|화이트리스트)"
+      ]
+    },
+    {
+      "id": "F4",
+      "severity": "critical",
+      "owasp": "API1/API3",
+      "title": "PATCH /users/:id lets any authenticated user update any user and (no whitelist) set role",
+      "near": [
+        "PATCH",
+        "(BOLA|IDOR|owner|소유자|mass|role)",
+        300
+      ]
+    },
+    {
+      "id": "F5",
+      "severity": "high",
+      "owasp": "API5",
+      "title": "GET /reports/overdue has @Roles(admin) but no RolesGuard is applied or global => the role metadata is decorative",
+      "near": [
+        "(reports/overdue|ReportsController)",
+        "(RolesGuard|가드|guard|장식|decorative|메타데이터|metadata|효과)",
+        500
+      ]
+    },
+    {
+      "id": "F6",
+      "severity": "high",
+      "owasp": "API2",
+      "title": "JwtStrategy ignoreExpiration:true (+30d tokens, fallback secret 'secret') => expired tokens still accepted",
+      "near": [
+        "ignoreExpiration",
+        "(true|만료|expir)",
+        200
+      ]
+    },
+    {
+      "id": "F7",
+      "severity": "high",
+      "owasp": "API8",
+      "title": "GET /users/search builds SQL from a template literal (SQL injection)",
+      "near": [
+        "search",
+        "(SQL|인젝션|injection)",
+        400
+      ],
+      "any": [
+        "SQL ?injection|SQL 인젝션"
+      ]
+    },
+    {
+      "id": "F8",
+      "severity": "high",
+      "owasp": "API3",
+      "title": "GET /users/search uses getRawMany so passwordHash is returned (bypasses ClassSerializerInterceptor @Exclude)",
+      "near": [
+        "(getRawMany|search)",
+        "(passwordHash|해시|hash)",
+        500
+      ]
+    },
+    {
+      "id": "F9",
+      "severity": "high",
+      "owasp": "API1",
+      "title": "POST /loans takes userId from the request body (act on behalf of any user)",
+      "near": [
+        "loans",
+        "(userId|impersonat|BOLA|IDOR|대리)",
+        400
+      ]
+    },
+    {
+      "id": "F10",
+      "severity": "high",
+      "owasp": "API1",
+      "title": "GET /users/:id lets any authenticated user read any other user",
+      "near": [
+        "users/:id",
+        "(BOLA|IDOR|소유자|owner)",
+        500
+      ]
+    },
+    {
+      "id": "F11",
+      "severity": "medium",
+      "owasp": "API8",
+      "title": "AllExceptionsFilter returns exception.stack to clients",
+      "near": [
+        "(AllExceptionsFilter|exception filter|예외 필터)",
+        "(stack|스택)",
+        400
+      ]
+    },
+    {
+      "id": "F12",
+      "severity": "medium",
+      "owasp": "API8",
+      "title": "enableCors({origin:true, credentials:true})",
+      "near": [
+        "(enableCors|CORS)",
+        "(origin: ?true|credentials|전체|모든|reflect)",
+        300
+      ]
+    },
+    {
+      "id": "F13",
+      "severity": "medium",
+      "owasp": "API4",
+      "title": "login has @SkipThrottle although a global throttler exists (brute force)",
+      "near": [
+        "SkipThrottle",
+        "(login|로그인|brute|무차별)",
+        300
+      ]
+    },
+    {
+      "id": "F14",
+      "severity": "high",
+      "owasp": "API8",
+      "title": "tracked .env + hardcoded AWS-style key in orphan src/config/aws.ts (values must not be shown)",
+      "near": [
+        "\\.env",
+        "(git|추적|tracked)",
+        400
+      ],
+      "also": [
+        "(AKIA|AWS)[^\\n]{0,200}aws\\.ts|aws\\.ts[^\\n]{0,200}(AKIA|AWS)"
+      ]
+    },
+    {
+      "id": "F15",
+      "severity": "medium",
+      "owasp": "API5",
+      "title": "POST /books/:id/cover has no role check: any authenticated user can replace any book cover",
+      "near": [
+        "cover",
+        "(role|권한|any|모든|RolesGuard|누구나|역할)",
+        400
+      ]
+    },
+    {
+      "id": "F16",
+      "severity": "low",
+      "owasp": "API9",
+      "title": "Swagger /docs is public; GET /admin/debug/config hidden with @ApiExcludeEndpoint (guarded, but dumps process.env)",
+      "near": [
+        "(docs|swagger|ApiExcludeEndpoint)",
+        "(공개|public|문서|숨|hidden|process\\.env)",
+        300
+      ]
+    },
+    {
+      "id": "F17",
+      "severity": "medium",
+      "owasp": "API8",
+      "title": "TypeORM synchronize:true in the only configured connection",
+      "near": [
+        "synchronize",
+        "(true|프로덕션|production)",
+        200
+      ]
+    }
+  ],
+  "facts": [
+    {
+      "id": "T1",
+      "title": "Runnability = conditional (DATABASE_URL/REDIS_URL/JWT_SECRET come from env; secrets have fallbacks)",
+      "near": [
+        "(DATABASE_URL|REDIS_URL|JWT_SECRET)",
+        "(조건부|conditional)",
+        500
+      ],
+      "also": [
+        "(조건부|conditional)"
+      ]
+    },
+    {
+      "id": "T2",
+      "title": "LoansTasks @Cron never runs: ScheduleModule is not imported anywhere",
+      "near": [
+        "(@Cron|LoansTasks|ScheduleModule)",
+        "(ScheduleModule|미등록|never|등록되지|import되지|동작하지|실행되지|dead|죽은)",
+        500
+      ],
+      "also": [
+        "ScheduleModule"
+      ]
+    },
+    {
+      "id": "T3",
+      "title": "EmailProcessor is a real Bull consumer (@Processor('emails') + registered queue)",
+      "near": [
+        "(EmailProcessor|@Processor|Bull)",
+        "(emails|queue|큐|consumer|컨슈머)",
+        300
+      ]
+    },
+    {
+      "id": "T4",
+      "title": "workers/legacy-worker.ts is a stub (console.log + TODO), not wired",
+      "near": [
+        "legacy-worker",
+        "(TODO|stub|스텁|미완|console\\.log)",
+        300
+      ]
+    },
+    {
+      "id": "T5",
+      "title": "Global APP_GUARD JwtAuthGuard = default-deny; @Public opt-outs are enumerated (login, register, health, catalog class, payments webhook)",
+      "near": [
+        "APP_GUARD",
+        "(JwtAuthGuard|전역|global|default)",
+        300
+      ],
+      "also": [
+        "(@Public|Public\\(\\))"
+      ]
+    },
+    {
+      "id": "T6",
+      "title": "Payments webhook verifies an HMAC-SHA256 signature with timingSafeEqual (correct; must not be reported as unverified)",
+      "near": [
+        "webhook",
+        "(HMAC|timingSafeEqual|서명 검증|signature (is )?verif|검증)",
+        500
+      ]
+    },
+    {
+      "id": "T7",
+      "title": "A global ThrottlerGuard exists (so 'no rate limiting anywhere' would be wrong)",
+      "near": [
+        "(ThrottlerGuard|ThrottlerModule|throttl)",
+        "(전역|global|60|분당|limit)",
+        300
+      ]
+    },
+    {
+      "id": "T8",
+      "title": "Prefix+versioning composition: books/:id exists only as /api/v2/books/:id; /health bypasses the prefix",
+      "near": [
+        "/api/v2/books",
+        "(version|버전|Version\\(|URI)",
+        400
+      ]
+    },
+    {
+      "id": "T9",
+      "title": "Auth is reachable: login issues a real signed JWT",
+      "near": [
+        "(jwt\\.sign|login)",
+        "(access_token|토큰 발급|issue|JwtService)",
+        400
+      ]
+    },
+    {
+      "id": "T10",
+      "title": "RolesGuard returns true when no @Roles metadata exists (allow-by-default)",
+      "near": [
+        "RolesGuard",
+        "(no @Roles|메타데이터가 없|기본 허용|allow.by.default|return true|없으면|허용)",
+        400
+      ]
+    }
+  ],
+  "leaks": [
+    "EVALFIXTUREFAKE",
+    "AKIAEVAL",
+    "sk_live_EVAL"
+  ],
+  "manual": [
+    "AdminController (/admin/users, DELETE /admin/users/:id, /admin/debug/config) is guarded by @UseGuards(RolesGuard)+@Roles(Admin): none of them may be reported as unguarded. /admin/debug/config is hidden from Swagger but guarded.",
+    "GET /users/:id and /users/me go through ClassSerializerInterceptor with @Exclude on passwordHash: they must NOT be reported as password-hash exposure (only /users/search leaks it via getRawMany).",
+    "Payments webhook verifies the HMAC (and rawBody is enabled in main.ts): must NOT be reported as unverified/unauthenticated-by-flaw.",
+    "File upload on /books/:id/cover has fileSize limit + mime filter: must NOT be reported as 'no upload size limit' (the flaw is the missing role check).",
+    "A global throttler exists: 'no rate limiting' must be limited to the @SkipThrottle on login.",
+    "GET /loans/mine uses req.user.id (safe); only POST /loans trusts a body userId.",
+    "Books: only /api/v2/books/:id exists (no v1 :id). Paths must carry the global prefix 'api' and version segment; /health must NOT carry them.",
+    "LoansTasks @Cron is dead because ScheduleModule is missing: must NOT be listed as an active scheduled job.",
+    "No invented endpoints/flaws; severity consistency (one flaw => one icon); ID continuity."
+  ]
+}
